@@ -8,13 +8,14 @@
 #   Authors:
 #       - Pedro Gonçalo Mendes, 81046, pedrogoncalomendes@tecnico.ulisboa.pt
 #       - Miguel Matos Malaca, 81702, miguelmmalaca@tecnico.ulisboa.pt
-#       -
-#       -
+#       - João José Rosa, 84089, joao.c.rosa@tecnico.ulisboa.pt
+#       - João Pedro Ferreira, 78101, joao.pedro.ferreira@tecnico.ulisboa.pt
 #
-#                      1st semestre, 2018/19
-#                   Instítuto Superior Técnico
+#                         1st semestre, 2018/19
+#                       Instítuto Superior Técnico
 #
 #-----------------------------------------------------------------------------
+
 
 import numpy as np
 
