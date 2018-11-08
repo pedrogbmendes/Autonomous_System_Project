@@ -16,3 +16,7 @@ ROS packages needed
  - openni_camera (not mandatory, but recommended)
  - sensor_mgs
  - hector_mapping (only to create the map)
+
+
+ sudo pip install transforms3d
+also numpy
