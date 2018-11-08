@@ -20,8 +20,16 @@
 import numpy as np
 from numpy import linalg as LA
 from transforms3d import quaternions
+import roslib
+import sys
+import rospy
+from std_msgs.msg import String
+from sensor_msgs.msg import Image, IMU
 
-#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------I
 #
 #   Global constants
 #
