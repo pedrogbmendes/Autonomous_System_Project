@@ -23,9 +23,7 @@ from transforms3d import quaternions
 import roslib
 import sys
 import rospy
-from std_msgs.msg import String
-from sensor_msgs.msg import Image, IMU
-
+from sensor_msgs.msg import Image, Imu, CameraInfo, MagneticField
 
 
 
@@ -56,6 +54,39 @@ v_z = np.array([0,0,1])
 #-----------------------------------------------------------------------------
 
 class drone_measures:
+
+    def __init__(self):
+
+        #frame
+		self.image_sub = rospy.Subscriber('/camera/depth/image',Image,self.save_image)
+		self.image_pub = rospy.Publisher('/image', Image, queue_size = 10)
+
+        #camera information
+		self.info_sub = rospy.Subscriber('/camera/depth/camera_info',CameraInfo,self.save_info)
+		self.info_pub = rospy.Publisher('/camera_info',CameraInfo, queue_size=10)
+
+        #IMU data (angular velocities and linear accelerations)
+        self.IMU_data = rospy.Subscriber('/imu/data_raw', Imu, self.IMU_readData)
+        #Magnetic field data
+        self.IMU_data = rospy.Subscriber('/imu/mag', MagneticField, self.IMU_readMag)
+        #publish the quaternions
+        self.IMU_data = rospy.Publisher('/data', Imu, queue_size = 10)
+
+
+        rospy.spin()
+
+
+    def save_image(self, data):
+    	return data
+
+    def save_info(self, data_info):
+        return data_info
+
+    def IMU_readData(self, dataIMU):
+        return dataIMU
+
+    def IMU_readMag(self, data_mag):
+        return data_mag
 
 
 
@@ -174,14 +205,16 @@ class EKF_localization:
 
     def take_image():
 
-        matrix_frame = drone_measures().
+        matrix_frame = drone_measures().save_image
 
         return matrix_frame
 
     def read_IMU():
 
-        quaternions = drone_measures().
+        data_v = drone_measures().IMU_readData
+        mag_f = drone_measures().IMU_readMag
 
+        quaternions =
         rotation_matrix = quaternions.quat2mat(quaternions)
 
         return rotation_matrix
@@ -198,6 +231,8 @@ class EKF_localization:
 #-----------------------------------------------------------------------------
 if __name__ == '__main__':
     try:
+        rospy.init_node('drone', anonymous=True)
+
         robot = drone_measures()
         prog = EKF_localization()
     except rospy.RosInterruptException:
