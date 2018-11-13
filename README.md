@@ -15,8 +15,9 @@ ROS packages needed
  - openni_launch (not mandatory, but recommended)
  - openni_camera (not mandatory, but recommended)
  - hector_mapping (only to create the map)
- - imu_complementary_filter
- - IMU_tools sudo apt-get install ros-kinetic-imu-tools
+ - IMU_tools:  sudo apt-get install ros-kinetic-imu-tools
+ - sudo apt-get install ros-kinetic-phidgets-imu
 
+ 
  sudo pip install transforms3d
 also numpy

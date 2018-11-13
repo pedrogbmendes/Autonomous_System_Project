@@ -17,7 +17,7 @@ accel_address = 0x53 # accelerometer I2C address
 gyro_address = 0x68  # gyroscope I2C address
 magn_address = 0x1e  # magnetometer I2C address
 
-IMU_data = np.array([1,0,0],[0,1,0],[0,0,1])
+IMU_data = np.array([[1,0,0],[0,1,0],[0,0,1]])
 accel_xyz = np.array([0, 0, 0])
 gyros_xyz = np.array([0, 0, 0])
 magn_xyz = np.array([0, 0, 0])
@@ -42,38 +42,54 @@ GYRO_AVERAGE_OFFSET_Z = 0
 class take_dataIMU:
 
 	def __init__(self):
+		self.IMU_data = rospy.Publisher('/imu/data_raw', Imu, queue_size = 10)
+		self.IMU_data = rospy.Publisher('/imu/data_raw', Imu, queue_size = 10)
 
-        #IMU data (angular velocities and linear accelerations)
-		self.IMU_data = rospy.Subscriber('/imu/data_raw', Imu, self.IMU_readData)
+		self.read_IMU()
+		self.compensate_sensor_errors()
+		self.IMU_readData();
+       #IMU data (angular velocities and linear accelerations)
+
         #Magnetic field data
-		self.IMU_mag = rospy.Subscriber('/imu/mag',MagneticField,self.IMU_readMag)
+		#self.IMU_mag = rospy.Subscriber('/imu/mag',MagneticField,self.IMU_readMag)
         #publish the quaternions
-		self.IMU_quaternions = rospy.Publisher('/data', Imu, queue_size = 10)
-
+		#self.IMU_quaternions = rospy.Publisher('/data', Imu, queue_size = 10)
+		print "merda"
 		rospy.spin()
 
-   	def IMU_readData(self, photo):
-		return
+   	def IMU_readData(self):
+		# Header header
+		#
+		# geometry_msgs/Quaternion orientation
+		# float64[9] orientation_covariance # Row major about x, y, z axes
+		#
+		# geometry_msgs/Vector3 angular_velocity
+		# float64[9] angular_velocity_covariance # Row major about x, y, z axes
+		#
+		# geometry_msgs/Vector3 linear_acceleration
+		# float64[9] linear_acceleration_covariance # Row major x, y z
+		self.data_pub = Imu()
 
-	def IMU_readMag(self, data):
-		return
+		self.data_pub.orientation = 0
+		self.data_pub.orientation_covariance[0] = -1
+
+		self.data_pub.angular_velocity = IMU_data[1,:] #gyros_xyz
+		self.data_pub.angular_velocity_covariance[0] = -1
+
+		self.data_pub.linear_acceleration = IMU_data[0,:] #accel_xyz
+		self.data_pub.linear_acceleration_covariance[0] = -1
+
+		#self.data_pub.header.stamp = rospy.Time.now()
+		#self.data_pub.header.frame_id =
+		#self.data_pub.header.seq = self.seq
+
+		self.IMU_data.publish(self.data_pub)
+		#self.seq += 1
 
 
-	def set_IMU():
-
-	    bus.write_byte_data(accel_address, 0x2c, 0x0b) # BW_RATE 100Hz
-	    bus.write_byte_data(accel_address, 0x31, 0x00) # DATA_FORMAT +-2g 10-bit resolution
-	    bus.write_byte_data(accel_address, 0x2d, 0x08) # Power Control Register measurement mode
-
-    	bus.write_byte_data(gyro_address, 0x15, 0x07) # SMPLRT_DIV - 125Hz (output sample rate)
-    	bus.write_byte_data(gyro_address, 0x16, 0x1a) # DLPF_FS - +-2000deg/s ; # DLPF_CFG - low pass 98Hz, internal sample rate 1kHz
-
-    	bus.write_byte_data(magn_address, 0x02, 0x00) # MODE continuous - 15Hz default
-    	bus.write_byte_data(magn_address, 0x00, 0x18) # Config_REG_A - Output rate 75Hz
 
 
-
-	def get_accel():
+	def get_accel(self):
 
 	    accel = np.empty([3])
 	    accel_x = bytearray()
@@ -94,7 +110,7 @@ class take_dataIMU:
 
 	    return accel
 
-	def get_gyro():
+	def get_gyro(self):
 
 	    gyro = np.empty([3])
 	    gyro_x = bytearray()
@@ -115,7 +131,7 @@ class take_dataIMU:
 
 	    return gyro
 
-	def get_magn():
+	def get_magn(self):
 
 	    magn = np.empty([3])
 	    magn_x = bytearray()
@@ -136,7 +152,7 @@ class take_dataIMU:
 
 	    return magn
 
-	def compensate_sensor_errors():
+	def compensate_sensor_errors(self):
 
 	    global accel_xyz
 	    global gyro_xyz
@@ -151,55 +167,89 @@ class take_dataIMU:
 	    gyro_xyz[2] = (gyro_xyz[2] - GYRO_AVERAGE_OFFSET_Z) * GYRO_GAIN
 
 
-	def initialization_IMU():
+		IMU_data[0,:] = accel_xyz
+		IMU_data[1,:] = gyro_xyz
+		IMU_data[2,:] = magn_xyz
 
-		global GYRO_AVERAGE_OFFSET_X
-		global GYRO_AVERAGE_OFFSET_Y
-		global GYRO_AVERAGE_OFFSET_Z
-
-		set_IMU()
-
-		# gyro must be stationary for correct calibration
-		gyro_offset = np.zeros(3)
-		for i in range(0,255):
-			gyro_result = get_gyro()
-			gyro_offset[0] += gyro_result[0]
-			gyro_offset[1] += gyro_result[1]
-			gyro_offset[2] += gyro_result[2]
-
-
-		GYRO_AVERAGE_OFFSET_X = gyro_offset[0] * 0.00390625 # 1/256
-		GYRO_AVERAGE_OFFSET_Y = gyro_offset[1] * 0.00390625 # 1/256
-		GYRO_AVERAGE_OFFSET_Z = gyro_offset[2] * 0.00390625 # 1/256
-
-
-	def read_IMU():
+	def read_IMU(self):
 
 		global accel_xyz
 		global gyro_xyz
 		global magn_xyz
 		global IMU_data
 
-		accel_xyz = get_accel()
-		gyro_xyz = get_gyro()
-		magn_xyz = get_magn()
+		accel_xyz = self.get_accel()
+		gyro_xyz = self.get_gyro()
+		magn_xyz = self.get_magn()
 
-		IMU_data[0,:] = accel_xyz
-		IMU_data[1,:] = gyro_xyz
-		IMU_data[2,:] = magn_xyz
 
+
+
+
+def initialization_IMU():
+
+	global GYRO_AVERAGE_OFFSET_X
+	global GYRO_AVERAGE_OFFSET_Y
+	global GYRO_AVERAGE_OFFSET_Z
+
+	set_IMU()
+
+	# gyro must be stationary for correct calibration
+	gyro_offset = np.zeros(3)
+	for i in range(0,255):
+		gyro_result = get_gyro_in()
+		gyro_offset[0] += gyro_result[0]
+		gyro_offset[1] += gyro_result[1]
+		gyro_offset[2] += gyro_result[2]
+
+	GYRO_AVERAGE_OFFSET_X = gyro_offset[0] * 0.00390625 # 1/256
+	GYRO_AVERAGE_OFFSET_Y = gyro_offset[1] * 0.00390625 # 1/256
+	GYRO_AVERAGE_OFFSET_Z = gyro_offset[2] * 0.00390625 # 1/256
+
+def get_gyro_in():
+
+	gyro = np.empty([3])
+	gyro_x = bytearray()
+	gyro_y = bytearray()
+	gyro_z = bytearray()
+
+	gyro_x.append(bus.read_byte_data(gyro_address, 0x1d)) # GYRO_XOUT_H
+	gyro_x.append(bus.read_byte_data(gyro_address, 0x1e)) # GYRO_XOUT_L
+	gyro[0] = struct.unpack('>h',bytes(gyro_x))[0]
+
+	gyro_y.append(bus.read_byte_data(gyro_address, 0x1f)) # GYRO_YOUT_H
+	gyro_y.append(bus.read_byte_data(gyro_address, 0x20)) # GYRO_YOUT_L
+	gyro[1] = struct.unpack('>h',bytes(gyro_y))[0]
+
+	gyro_z.append(bus.read_byte_data(gyro_address, 0x21)) # GYRO_ZOUT_H
+	gyro_z.append(bus.read_byte_data(gyro_address, 0x22)) # GYRO_ZOUT_L
+	gyro[2] = struct.unpack('>h',bytes(gyro_z))[0]
+
+	return gyro
+
+def set_IMU():
+
+	bus.write_byte_data(accel_address, 0x2c, 0x0b) # BW_RATE 100Hz
+	bus.write_byte_data(accel_address, 0x31, 0x00) # DATA_FORMAT +-2g 10-bit resolution
+	bus.write_byte_data(accel_address, 0x2d, 0x08) # Power Control Register measurement mode
+
+	bus.write_byte_data(gyro_address, 0x15, 0x07) # SMPLRT_DIV - 125Hz (output sample rate)
+	bus.write_byte_data(gyro_address, 0x16, 0x1a) # DLPF_FS - +-2000deg/s ; # DLPF_CFG - low pass 98Hz, internal sample rate 1kHz
+
+	bus.write_byte_data(magn_address, 0x02, 0x00) # MODE continuous - 15Hz default
+	bus.write_byte_data(magn_address, 0x00, 0x18) # Config_REG_A - Output rate 75Hz
 
 
 def data_imu():
-	take_dataIMU().initialization_IMU()
-	take_dataIMU().read_IMU()
-	take_dataIMU().compensate_sensor_errors()
-	rospy.init_node('drone-imu', anonymous=True)
-	im = take_dataIMU()
+	rospy.init_node('droneimu', anonymous=True)
+	initialization_IMU()
+	robot = take_dataIMU()
+
 
 
 if __name__ == '__main__':
-	try:
-		data_imu()
-	except rospy.RosInterruptException:
-		pass
+	data_imu()
+#	try:
+#		data_imu()
+#	except rospy.RosInterruptException:
+#		pass
