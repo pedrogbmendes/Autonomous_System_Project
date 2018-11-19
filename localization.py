@@ -48,6 +48,11 @@ v_x = np.array([1,0,0])
 v_y = np.array([0,1,0])
 v_z = np.array([0,0,1])
 
+#map info
+resolution = 0.05;
+origin = np.array([-51.224998, -51.224998, 0.000000]);
+occupied_thresh = 0.65;
+free_thresh = 0.196;
 
 #-----------------------------------------------------------------------------
 #
@@ -87,6 +92,28 @@ class EKF_localization:
         self.frame = np.zeros((480,640))#size of the image taken by the camera
         #line fo frame
         self.line_z = 0
+        #observation modes
+        self.h = 0
+        #map
+        self.map = self.openfile()
+
+    def openfile(self):
+        fl = open("map.pgm", "r")
+
+
+        assert fl.readline() == 'P5\n'
+        info = fl.readline()
+        (width, height) = [int(i) for i in fl.readline().split()]
+        depth = int(fl.readline())
+        assert depth <= 255
+
+        raster = [][]
+        for i in range(height):
+            for j in range(width):
+                raster[i][j] = fl.read(1);
+        return raster
+
+
 
     def robot_localization():
 
@@ -119,7 +146,7 @@ class EKF_localization:
         #Kalman gain
         k = (self.pred_cov.dot(self.matrix_H.transpose())).dot(inv((self.matrix_H.dot(self.pred_cov)).dot(self.matrix_H.transpose()) + matrix_Q))
 
-        self.act_state = self.pred_state + k.dot(self.line_z - h)
+        self.act_state = self.pred_state + k.dot(self.line_z - self.h)
         self.act_cov = (I - k.dot(self.matrix_H)).dot(self.pred_cov)
 
 
@@ -130,6 +157,7 @@ class EKF_localization:
     def save_image(self, photo):
         self.frame = photo
         self.line_z = self.take_frame_line()
+        self.h = self.observation_model()
         self.update_step()
 
 
@@ -200,6 +228,7 @@ class EKF_localization:
         return line
 
 
+    def self.observation_model():
 
 
 
