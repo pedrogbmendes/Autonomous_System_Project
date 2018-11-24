@@ -28,6 +28,7 @@ import rospy
 from sensor_msgs.msg import Image, Imu
 import time
 import math
+from PIL import Image
 
 
 #-----------------------------------------------------------------------------I
@@ -49,10 +50,10 @@ v_y = np.array([0,1,0])
 v_z = np.array([0,0,1])
 
 #map info
-resolution = 0.05;
-origin = np.array([-51.224998, -51.224998, 0.000000]);
-occupied_thresh = 0.65;
-free_thresh = 0.196;
+resolution = 0.05 #meters/pixel
+origin = np.array([-51.224998, -51.224998, 0.000000])
+occupied_thresh = 0.65
+free_thresh = 0.196
 
 #-----------------------------------------------------------------------------
 #
@@ -85,7 +86,7 @@ class EKF_localization:
         #predicted covariance
         self.pred_cov = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]))
         #Jacobian matrix
-        self.matrix_H = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]])
+        self.matrix_H = np.zeros(4, 1)
         #rotation matrix
         self.rotation_matrix = np.array([[0.0,0.0,0.0],[0.0,0.0,0.0],[0.0,0.0,0.0]])
         #frame
@@ -95,24 +96,26 @@ class EKF_localization:
         #observation modes
         self.h = 0
         #map
-        self.map = self.openfile()
-
-    def openfile(self):
-        fl = open("map.pgm", "r")
+        self.map = self.openImage();
 
 
-        assert fl.readline() == 'P5\n'
-        info = fl.readline()
-        (width, height) = [int(i) for i in fl.readline().split()]
-        depth = int(fl.readline())
-        assert depth <= 255
+    def openImage(self):
 
-        raster = [][]
-        for i in range(height):
-            for j in range(width):
-                raster[i][j] = fl.read(1);
-        return raster
+        np.set_printoptions(threshold=np.inf) #see all matrix
 
+        img = Image.open("map.pgm")
+        area = (950, 950, 1600, 1130) #left, top, right, bottom
+        cropped_img = img.crop(area)
+        img_matrix = np.array(cropped_img)
+
+        #unknown positions of map
+        BW_img_des = img_matrix == 205
+        BW_img_des = BW_img_des * - 1
+        #occupied positions of the map
+        BW_img_oc = img_matrix == 254
+        BW_img_oc = BW_img_oc* 1  #0 and 1 instead of False and True
+
+        return BW_img_des+BW_img_oc
 
 
     def robot_localization():
@@ -228,11 +231,87 @@ class EKF_localization:
         return line
 
 
-    def self.observation_model():
+    def self.observation_model(self, size_vector):
+
+        h_v = np.zeros(size_vector, 1)
+        middle = floor(size_vector/2)
+        jacH = np.zeros(size_vector, 4)
+
+        x_s = self.pred_state[0]
+        y_s = self.pred_state[2]
+
+        yaw = p.arccos( np.dot(v_z, self.rotation_matrix[:,2] )/np.dot( LA.norm(v_z), LA.norm(self.rotation_matrix[:,2])) )
+
+        new_yaw = yaw +
+
+        direction1 = new_yaw - (np.pi/2)
+        direction2 = new_yaw + (np.pi/2)
+
+        for i in range (middle, size_vector)
+            x_m = floor( x_s + cos(new_yaw) + 0.5)
+            y_m = floor( y_s - sen(new_yaw) + 0.5)
+
+            count_pixels = 1
+            distance_max = count_pixels * resolution
+            #prediction of position point by the camera
+            #Stops when find a obstacle or reachs the max range of camera (5 meters)
+            while (map[x_m, y_m] != 1 and distance_max < 5 ):
+                x_m = floor(self.pred_state[0] + cos(new_yaw) + 0.5)
+                y_m = floor(self.pred_state[2] - sen(new_yaw) + 0.5)
+                count_pixels += 1
+                distance_max = count_pixels * resolution
 
 
+            vector_dis = np.array([[x_s-x_m],[y_s -y_m]])
+            h_v(i) = LA.norm(vector_dis)
+
+            jacH[i,:] = self.jacobian(x_s, y_s, x_m, y_m)
+
+            x_s = floor( x_s + cos(direction1) + 0.5)
+            y_s = floor( y_s - sen(direction1) + 0.5)
 
 
+        x_s = floor( self.pred_state[0] + cos(direction2) + 0.5)
+        y_s = floor( self.pred_state[2] - sen(direction2) + 0.5)
+
+        for j in range (middle-1, -1, -1)
+            x_m = floor( x_s + cos(new_yaw) + 0.5)
+            y_m = floor( y_s - sen(new_yaw) + 0.5)
+
+            count_pixels = 1
+            distance_max = count_pixels * resolution
+            #prediction of position point by the camera
+            #Stops when find a obstacle or reachs the max range of camera (5 meters)
+            while (map[x_m, y_m] != 1 and distance_max < 5 ):
+                x_m = floor(self.pred_state[0] + cos(new_yaw) + 0.5)
+                y_m = floor(self.pred_state[2] - sen(new_yaw) + 0.5)
+                count_pixels += 1
+                distance_max = count_pixels * resolution
+
+
+            vector_dis = np.array([[x_s-x_m],[y_s -y_m]])
+            h_v(j) = LA.norm(vector_dis)
+
+            jacH[j,:] = self.jacobian(x_s, y_s, x_m, y_m)
+
+            x_s = floor( x_s + cos(direction2) + 0.5)
+            y_s = floor( y_s - sen(direction2) + 0.5)
+
+        self.matrix_H = jacH
+
+        return h_v
+
+
+    def jacobian(self, xs, ys, xp, yp):
+
+        d_h = np.zeros(4)
+
+        d_h[0] = (xs-xp)/sqrt((xs-xp)^2+(xs-xp)^2)
+        d_h[1] = -(xs-xp)/sqrt((xs-xp)^2+(xs-xp)^2)
+        d_h[2] = (ys-yp)/sqrt((xs-xp)^2+(xs-xp)^2)
+        d_h[3] = -(ys-yp)/sqrt((xs-xp)^2+(xs-xp)^2)
+
+        return h_
 
 
 #-----------------------------------------------------------------------------
