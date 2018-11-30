@@ -39,10 +39,8 @@ from PIL import Image
 I = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]])
 cov_x = 1
 cov_y = 1
-matrix_R = np.array([[0,0,0,0],[0,cov_x,0,0],[0,0,0,0],[0,0,0,cov_y]])
-covq_x = 1
-covq_y = 1
-matrix_Q = np.array([[0,0,0,0],[0,covq_x,0,0],[0,0,0,0],[0,0,0,covq_y]])
+cov_teta = 1
+matrix_R = np.array([[0,0,0,0],[0,cov_x,0,0],[0,0,0,0],[0,0,0,cov_y],[0,0,0,0],[0,0,0,cov_teta]])
 
 #Camera coordenate frames vectors
 v_x = np.array([1,0,0])
@@ -52,8 +50,7 @@ v_z = np.array([0,0,1])
 #map info
 resolution = 0.05 #meters/pixel
 origin = np.array([-51.224998, -51.224998, 0.000000])
-occupied_thresh = 0.65
-free_thresh = 0.196
+
 
 #-----------------------------------------------------------------------------
 #
@@ -72,21 +69,24 @@ class EKF_localization:
         #difference of time
         self.delta_time = 0
         #previous state
-        self.prev_state = np.array([0,0,0,0])
+        self.prev_state = np.array([0,0,0,0,0,0])
         #actual state
-        self.act_state = np.array([0,0,0,0])
+        self.act_state = np.array([0,0,0,0,0,0])
         #predicted state
-        self.pred_state = np.array([0,0,0,0])
+        self.pred_state = np.array([0,0,0,0,0,0])
         #motion model
-        self.matrix_A = np.array([[1,self.delta_time,0,0],[0,1,0,0],[0,0,1,self.delta_time],[0,0,0,1]])
+        self.matrix_A = np.array([[1,self.delta_time,0,0,0,0],[0,1,0,0,0,0],[0,0,1,self.delta_time,0,0],[0,0,0,1,0,0],[0,0,0,0,1,self.delta_time],[0,0,0,0,0,1]])
+        hsfkjhs =fdskbk
         #covariance of instance t-1
-        self.prev_cov = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]])
+        self.prev_cov = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
         #covariance of instance t
-        self.act_cov = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]])
+        self.act_cov = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
         #predicted covariance
-        self.pred_cov = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]))
+        self.pred_cov = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
         #Jacobian matrix
-        self.matrix_H = np.zeros(4, 1)
+        self.matrix_H = np.zeros((6, 1))
+        #covariance of noise observation matrix
+        self.matrix_Q = np.identity(2)
         #rotation matrix
         self.rotation_matrix = np.array([[0.0,0.0,0.0],[0.0,0.0,0.0],[0.0,0.0,0.0]])
         #frame
@@ -96,7 +96,7 @@ class EKF_localization:
         #observation modes
         self.h = 0
         #map
-        self.map = self.openImage();
+        self.map = self.openImage()
 
 
     def openImage(self):
@@ -139,6 +139,7 @@ class EKF_localization:
 
         self.matrix_A[0][1] = self.delta_time
         self.matrix_A[2][3] = self.delta_time
+        self.matrix_A[4][5] = self.delta_time
 
         self.pred_state = self.matrix_A.dot(self.prev_state)
         self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R
@@ -249,21 +250,21 @@ class EKF_localization:
 
         for i in range (middle, size_vector)
             x_m = floor( x_s + cos(new_yaw) + 0.5)
-            y_m = floor( y_s - sen(new_yaw) + 0.5)
+            y_m = floor( y_s - sin(new_yaw) + 0.5)
 
             count_pixels = 1
             distance_max = count_pixels * resolution
             #prediction of position point by the camera
             #Stops when find a obstacle or reachs the max range of camera (5 meters)
             while (map[x_m, y_m] != 1 and distance_max < 5 ):
-                x_m = floor(self.pred_state[0] + cos(new_yaw) + 0.5)
-                y_m = floor(self.pred_state[2] - sen(new_yaw) + 0.5)
+                x_m = floor(x_m + cos(new_yaw) + 0.5)
+                y_m = floor(y_m - sen(new_yaw) + 0.5)
                 count_pixels += 1
                 distance_max = count_pixels * resolution
 
 
             vector_dis = np.array([[x_s-x_m],[y_s -y_m]])
-            h_v(i) = LA.norm(vector_dis)
+            h_v[i] = LA.norm(vector_dis)
 
             jacH[i,:] = self.jacobian(x_s, y_s, x_m, y_m)
 
@@ -283,8 +284,8 @@ class EKF_localization:
             #prediction of position point by the camera
             #Stops when find a obstacle or reachs the max range of camera (5 meters)
             while (map[x_m, y_m] != 1 and distance_max < 5 ):
-                x_m = floor(self.pred_state[0] + cos(new_yaw) + 0.5)
-                y_m = floor(self.pred_state[2] - sen(new_yaw) + 0.5)
+                x_m = floor(x_m + cos(new_yaw) + 0.5)
+                y_m = floor(y_m - sen(new_yaw) + 0.5)
                 count_pixels += 1
                 distance_max = count_pixels * resolution
 
