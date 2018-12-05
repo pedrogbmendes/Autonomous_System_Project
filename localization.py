@@ -1,22 +1,3 @@
-#-----------------------------------------------------------------------------
-#
-#                           Autonomous Systems
-#
-#       Project: Extended Kalman Filter (EKF) localization using a drone with
-#   a depth camera and a IMU
-#
-#       Drone node: Extended Kalman Filter
-#
-#   Authors:
-#       - Pedro Gonçalo Mendes, 81046, pedrogoncalomendes@tecnico.ulisboa.pt
-#       - Miguel Matos Malaca, 81702, miguelmmalaca@tecnico.ulisboa.pt
-#       - João José Rosa, 84089, joao.c.rosa@tecnico.ulisboa.pt
-#       - João Pedro Ferreira, 78101, joao.pedro.ferreira@tecnico.ulisboa.pt
-#
-#                         1st semestre, 2018/19
-#                       Instítuto Superior Técnico
-#
-#-----------------------------------------------------------------------------
 
 
 import numpy as np
@@ -76,7 +57,6 @@ class EKF_localization:
         self.pred_state = np.array([0,0,0,0,0,0])
         #motion model
         self.matrix_A = np.array([[1,self.delta_time,0,0,0,0],[0,1,0,0,0,0],[0,0,1,self.delta_time,0,0],[0,0,0,1,0,0],[0,0,0,0,1,self.delta_time],[0,0,0,0,0,1]])
-        hsfkjhs =fdskbk
         #covariance of instance t-1
         self.prev_cov = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
         #covariance of instance t
@@ -118,14 +98,14 @@ class EKF_localization:
         return BW_img_des+BW_img_oc
 
 
-    def robot_localization():
+    def robot_localization(self):
 
         self.predition_step()
 
         #node of drone to Subscribe IMU data
         self.subsIMU = rospy.Subscriber('/imu/data_raw',Imu,self.sub_pub_calRot)
         #and to to Subscribe camera data
-		self.image_sub = rospy.Subscriber('/camera/depth/image',Image,self.save_image)
+        self.image_sub = rospy.Subscriber('/camera/depth/image',Image,self.save_image)
         rate = rospy.Rate(10)
 
         rospy.spin()
@@ -134,8 +114,12 @@ class EKF_localization:
     def predition_step(self):
 
         self.prev_time = self.act_time
+	print("a=%s" % self.act_time)
+	print("b=%s" % self.prev_time)
         self.act_time = rospy.Time.now()
+	print("c=%s" % self.act_time)
         self.delta_time = self.act_time - self.prev_time
+	print("d=%s" % self.delta_time)
 
         self.matrix_A[0][1] = self.delta_time
         self.matrix_A[2][3] = self.delta_time
@@ -164,7 +148,7 @@ class EKF_localization:
         self.h = self.observation_model()
         self.update_step()
 
-
+    '''
     def take_frame_line(self):
 
         index_W = np.arange(640)
@@ -230,8 +214,9 @@ class EKF_localization:
         line = self.frame[index_H, index_W]
 
         return line
+    '''
 
-
+    '''
     def self.observation_model(self, size_vector):
 
         h_v = np.zeros(size_vector, 1)
@@ -301,7 +286,7 @@ class EKF_localization:
         self.matrix_H = jacH
 
         return h_v
-
+    '''
 
     def jacobian(self, xs, ys, xp, yp):
 
@@ -321,7 +306,7 @@ class EKF_localization:
 #
 #-----------------------------------------------------------------------------
 if __name__ == '__main__':
-    try:
+    #try:
 
         prog = EKF_localization()
 
@@ -330,5 +315,5 @@ if __name__ == '__main__':
 
 
 
-    except rospy.RosInterruptException:
+    #except rospy.RosInterruptException:
         pass
