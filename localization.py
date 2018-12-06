@@ -191,7 +191,16 @@ class EKF_localization:
         #select the line
 
         line = self.frame[320,:]
-        ori =
+
+        ori = 1
+
+        if self.rotation_matrix[1, 0] != 0:
+            ori = (self.rotation_matrix[1, 0]/abs(self.rotation_matrix[1, 0]))
+
+        ori = ori * np.arccos(self.rotation_matrix[0, 0]/LA.norm(np.array([self.rotation_matrix[0, 0], self.rotation_matrix[1, 0], 0])))
+        
+        print ori
+
         line_orient = np.concatenate((a, ori))
         return line
 

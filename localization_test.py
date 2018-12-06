@@ -10,7 +10,12 @@ import time
 from sensor_msgs.msg import Image, Imu
 import datetime
 import math
+import matplotlib.pyplot as plt
 from PIL import Image
+from matplotlib import colors
+import matplotlib.animation as anim
+import pylab as pl
+
 
 
 #-----------------------------------------------------------------------------I
@@ -57,7 +62,7 @@ class EKF_localization:
         #previous state
         self.prev_state = np.array([[0],[0],[0],[0],[0],[0]])
         #actual state
-        self.act_state = np.array([[1.1],[0],[1.9],[0],[np.pi/2],[0]])
+        self.act_state = np.array([[1.1],[0],[1],[0],[np.pi/2],[0]])
         #predicted state
         self.pred_state = np.array([[0],[0],[0],[0],[0],[0]])
         #motion model
@@ -111,8 +116,11 @@ class EKF_localization:
 	#print "prediction:"
 	
 	#print self.act_cov
+	
+	
 	time.sleep(1)
-        '''
+        
+	'''
 	#node of drone to Subscribe IMU data
 	self.subsIMU = rospy.Subscriber('/imu/data_raw',Imu,self.sub_pub_calRot)
 	#and to to Subscribe camera data
@@ -165,8 +173,38 @@ class EKF_localization:
         self.act_cov = (I - k.dot(self.matrix_H)).dot(self.pred_cov)
 
 	print self.pred_state
-	
+     
+       # fig = plt.figure()
+        #x = np.array(range(-10,10))
+        #y = self.pred_state[4]*(xs-1) - 1
+	#print x.shape
+        #print y
+        endy = ys +(3* math.sin(self.pred_state[4]))
+        endx = xs +(3* math.cos(self.pred_state[4]))
+	plt.ion()
+        fig=plt.figure(1)
+        pl.figure(1)
+        ax = fig.add_subplot(111)
+	ax.plot([xs, endx], [ys, endy])
+        line1, = ax.plot(xs, ys, 'ro') 
+	line1, = ax.plot(xp, yp, 'go') 
+	line1, = ax.plot(xp, yp, 'b-')
+  
+        s = -2 * math.log(1 - 0.95)
+	w, v=LA.eig(self.pred_cov*s)
 
+        t = np.linspace(0, 2*math.pi, 100)
+        plt.plot( xs+w[1]*np.cos(t) , ys+w[2]*np.sin(t) )
+        plt.grid(color='lightgray',linestyle='--')
+
+        #pl.plot(xs,y)
+        plt.axis([-15, 15, -15, 15])
+        #line1.set_ydata(np.sin(0.5 * x + phase))
+        fig.canvas.draw()
+	#plt.axis([0, 5, 0, 5])
+        #a = anim.FuncAnimation(fig, update, frames=10, repeat=False)
+        #plt.show()
+        plt.gcf().clear()
 
     def jacobian(self):
 
