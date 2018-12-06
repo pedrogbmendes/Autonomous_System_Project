@@ -199,7 +199,7 @@ class EKF_localization:
 
         ori = ori * np.arccos(self.rotation_matrix[0, 0]/LA.norm(np.array([self.rotation_matrix[0, 0], self.rotation_matrix[1, 0], 0])))
         
-        print ori
+        print(ori)
 
         line_orient = np.concatenate((a, ori))
         return line
