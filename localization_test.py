@@ -38,10 +38,18 @@ v_z = np.array([0,0,1])
 resolution = 0.05 #meters/pixel
 
 size_vector = 2
-xs = 1
-ys = 2
-xp = 1
-yp = 3
+xr = [0, -50, -200, -275, -275]
+yr = [0, 100, 150, 150, 100]
+orir = [np.pi/2, 3*np.pi/4, 3*np.pi/4, 3*np.pi/4, np.pi]
+
+xp = [0, -150, -250, -300, -300]
+yp = [200, 200, 200, 175, 100]
+
+
+orim = [np.pi/2, 3*np.pi/4, 3*np.pi/4, 3*np.pi/4, np.pi]
+dm = [200, 141, 70.5, 35.25, 25]
+
+ct = 0
 
 #-----------------------------------------------------------------------------
 #
@@ -62,7 +70,7 @@ class EKF_localization:
 		#previous state
 		self.prev_state = np.array([[0],[0],[0],[0],[0],[0]])
 		#actual state
-		self.act_state = np.array([[1.3],[0],[-5],[0],[np.pi/2],[0]])
+		self.act_state = np.array([[0],[0],[0],[0],[np.pi/2],[0]])
 		#predicted state
 		self.pred_state = np.array([[0],[0],[0],[0],[0],[0]])
 		#motion model
@@ -146,14 +154,20 @@ class EKF_localization:
 		self.matrix_A[2][3] = self.delta_time
 		self.matrix_A[4][5] = self.delta_time
 
+		#print(self.prev_state)
+		print(self.pred_state)
+		#print(self.matrix_A)
 		self.pred_state = self.matrix_A.dot(self.prev_state)
 		self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R
-	
+
+		
 
 	def update_step(self):
-
+		c = ct
+		if (c > 4): 
+			c = 4
 		#Kalman gain
-		self.line_z = np.array([[1],[np.pi/2]])
+		self.line_z = np.array([[dm[c]],[orim[c]]])
 		global ys
 		ys = self.pred_state[2]
 		global xs
@@ -163,7 +177,10 @@ class EKF_localization:
 	#else:
 	#	ys =  self.pred_state[2] - 2
 	
-		self.h = np.array([[math.sqrt(np.power(xs-xp, 2)+np.power(ys-yp, 2))],self.pred_state[4]])
+		
+		#print(self.pred_state[2])
+		self.h = np.array([[math.sqrt(np.power(xs-xp[c], 2)+np.power(ys-yp[c], 2))],self.pred_state[4]])
+
 
 		self.jacobian()
 		self.matrix_Q = np.identity(size_vector)
@@ -172,7 +189,7 @@ class EKF_localization:
 		self.act_state = self.pred_state + k.dot(self.line_z - self.h)
 		self.act_cov = (I - k.dot(self.matrix_H)).dot(self.pred_cov)
 
-		print (self.pred_state)
+		print (self.line_z)
 	 
 	   # fig = plt.figure()
 		#x = np.array(range(-10,10))
@@ -186,7 +203,7 @@ class EKF_localization:
 		pl.figure(1)
 		ax = fig.add_subplot(111)
 		ax.plot([xs, endx], [ys, endy])
-		line1, = ax.plot(1, 2, 'ro') 
+		line1, = ax.plot(xr[c], yr[c], 'ro') 
 		line1, = ax.plot(xs, ys, 'go') 
 		line1, = ax.plot(xp, yp, 'b-')
   
@@ -198,7 +215,7 @@ class EKF_localization:
 		plt.grid(color='lightgray',linestyle='--')
 
 		#pl.plot(xs,y)
-		plt.axis([-15, 15, -15, 15])
+		plt.axis([-300, 300, -200, 200])
 		#line1.set_ydata(np.sin(0.5 * x + phase))
 		fig.canvas.draw()
 		#plt.axis([0, 5, 0, 5])
@@ -213,7 +230,7 @@ class EKF_localization:
 		#for it in range(0, size_vector-1):
 				
 		#	self.matrix_H[it,:] = self.partial_jacobian1(xs[it], ys[it], xp[it], yp[it])
-		self.matrix_H[0,:] = self.partial_jacobian1(xs, ys, xp, yp)
+		self.matrix_H[0,:] = self.partial_jacobian1(xs, ys, xp[ct], yp[ct])
 		self.matrix_H[size_vector-1, :] = self.partial_jacobian2()
 		
 
@@ -251,10 +268,11 @@ if __name__ == '__main__':
 	#try:
 
 	prog = EKF_localization()
-
+	ct = 0
 		#rospy.init_node('drone', anonymous=True)
 	while(1):
 		prog.robot_localization()
+		ct += 1
 
 
 
