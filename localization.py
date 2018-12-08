@@ -55,7 +55,7 @@ v_y = np.array([0,1,0])
 v_z = np.array([0,0,1])
 
 #map info
-resolution = 0.05 #meters/pixel
+resolution = 50 #milimeters/pixel
 
 #INITIAL CONDITIONS
 x_init = 0
@@ -162,7 +162,7 @@ class EKF_localization:
         self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R
 
     def matching_step(self, points):
-        
+
         size_v = len(self.line_z)
         self.jacobian(size_v, points[0,:], points[1,:], points[2,:], points[3,:])
         self.matrix_Q = np.identity(size_v)
@@ -195,7 +195,7 @@ class EKF_localization:
 
         points = self.observation_model(len(self.line_z) )
         if(self.matching_step(points) <= self.gama):
-            update_step()
+            self.update_step()
 
 
 
@@ -211,11 +211,11 @@ class EKF_localization:
             ori = (self.rotation_matrix[1, 0]/abs(self.rotation_matrix[1, 0]))
 
         ori = ori * np.arccos(self.rotation_matrix[0, 0]/LA.norm(np.array([self.rotation_matrix[0, 0], self.rotation_matrix[1, 0], 0])))
-        
+
         print(ori)
 
         line_orient = np.concatenate((a, ori))
-        return line
+        return line_orient
 
 
 
@@ -225,8 +225,8 @@ class EKF_localization:
         #and orientation
 
         #map's size
-        length_map = map.shape[1]#no of columns
-        width_map = map.shape[0]#no of rows
+        length_map = self.map.shape[1]#no of columns
+        width_map = self.map.shape[0]#no of rows
 
         self.h = np.zeros((size_vector, 1))#vector to return with the distances
         middle = int(np.floor(size_vector/2))
@@ -252,16 +252,16 @@ class EKF_localization:
 
         #predicted position of the drone
         x_incr = self.act_state[0]
-        x_s = self.act_state[0]
-        y_s = self.act_state[2]
-        x_m = self.act_state[0]
-        y_m = self.act_state[2]
+        x_s = int(self.act_state[0])
+        y_s = int(self.act_state[2])
+        x_m = int(self.act_state[0])
+        y_m = int(self.act_state[2])
 
         for i in range(middle, size_vector-1):
 
             #prediction of position point by the camera
             #Stops when find a obstacle or reachs the max range of camera (5 meters)
-            while map[y_m, x_m] == 0 and distance_max < 5 and x_m in range(0, length_map) and y_m in range(0, width_map):
+            while map[y_m, x_m] == 0 and distance_max < 5000 and x_m in range(0, length_map) and y_m in range(0, width_map):
                 while angle_incre <= -np.pi:
                     angle_incre += 2*np.pi
                 while angle_incre > np.pi:
@@ -359,7 +359,7 @@ class EKF_localization:
 
 
         for j in range (middle-1, -1, -1):
-            while map[y_m, x_m] == 0 and distance_max < 5 and x_m in range(0, length_map) and y_m in range(0, width_map):
+            while map[y_m, x_m] == 0 and distance_max < 5000 and x_m in range(0, length_map) and y_m in range(0, width_map):
                 while angle_incre <= -np.pi:
                     angle_incre += 2*np.pi
                 while angle_incre > np.pi:

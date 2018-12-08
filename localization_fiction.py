@@ -36,6 +36,10 @@ import rospy
 import time
 import math
 from PIL import Image
+from matplotlib import colors
+import matplotlib.animation as anim
+import pylab as pl
+import matplotlib.pyplot as plt
 
 
 #-----------------------------------------------------------------------------I
@@ -55,12 +59,12 @@ v_y = np.array([0,1,0])
 v_z = np.array([0,0,1])
 
 #map info
-resolution = 1 #meters/pixel
+resolution = 0.1 #meters/pixel
 
 #INITIAL CONDITIONS
-x_init = 0
+x_init = 50
 vx_init = 0
-y_init = 0
+y_init = 50
 vy_init = 0
 orientation_init = 0
 ang_vel_init = 0
@@ -75,7 +79,8 @@ yr = [0, 0, 5, 10, 15, 15, 15, 15, 10, 5, -5, -5, -5, -4, -10, 0]
 orir = [0, np.pi/4, np.pi/2, 3*np.pi/4, np.pi/2, np.pi/4, np.pi/6, 0, -np.pi/6, -np.pi/4, -np.pi/4, -np.pi/3, -np.pi/2, -np.pi/2, -3*np.pi/4, np.pi]
 dm = [30, 28.2, 15, 14.1, 5, 7.05, 10, 5, 5.8, 7.05, 7.05, 17.3, 15, 16, 14.1, 10]
 
-c = 0
+global ct
+ct = 0
 
 #-----------------------------------------------------------------------------
 #
@@ -136,22 +141,21 @@ class EKF_localization:
         new_map[:, 20] = 1
         new_map[:, 80] = 1
 
-        for i in range(0, 100):
-            for j in range(0, 100):
+        for i in range(0, 101):
+            for j in range(0, 101):
                 if (i < 30 or i > 70):
                     new_map[i, j] = -1
                 if (j < 20 or j > 80):
                     new_map[i, j] = -1
 
-
-
         return new_map
 
 
     def robot_localization(self):
-        ct = c
+
         while(1):
-            
+
+            global ct
             if(ct > 15):
                 ct = 1
 
@@ -166,11 +170,11 @@ class EKF_localization:
         # rospy.spin()
             self.line_z = np.array([[dm[ct]],[orir[ct]]])
             points = self.observation_model(len(self.line_z))
-
+            print self.h
             if(self.matching_step(points) <= self.gama):
-                update_step()
+                self.update_step()
 
-            
+            #global ct
             ct += 1
 
 
@@ -190,9 +194,12 @@ class EKF_localization:
         self.pred_state = self.matrix_A.dot(self.prev_state)
         self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R
 
+
     def matching_step(self, points):
-        
-        size_v = 2
+
+        size_v = len(self.line_z)
+
+        time.sleep(1)
         self.jacobian(size_v, points[0,:], points[1,:], points[2,:], points[3,:])
         self.matrix_Q = np.identity(size_v)
 
@@ -203,16 +210,14 @@ class EKF_localization:
         return match
 
 
-    def update_step(self, points):
+    def update_step(self):
 
-        global ys
         ys = self.pred_state[2]
-        global xs
         xs = self.pred_state[0]
 
         #Kalman gain
 
-        k = (self.pred_cov.dot(self.matrix_H.transpose())).dot(LA.inv((self.matrix_H.dot(self.pred_cov)).dot(self.matrix_H.transpose()) + matrix_Q))
+        k = (self.pred_cov.dot(self.matrix_H.transpose())).dot(LA.inv((self.matrix_H.dot(self.pred_cov)).dot(self.matrix_H.transpose()) + self.matrix_Q))
 
         self.act_state = self.pred_state + k.dot(self.line_z - self.h)
         self.act_cov = (I - k.dot(self.matrix_H)).dot(self.pred_cov)
@@ -224,7 +229,7 @@ class EKF_localization:
         pl.figure(1)
         ax = fig.add_subplot(111)
         ax.plot([xs, endx], [ys, endy])
-        line1, = ax.plot(xr[ct], yr[ct], 'ro') 
+        line1, = ax.plot(xr[ct], yr[ct], 'ro')
         line1, = ax.plot(xs, ys, 'go')
 
         s = -2 * math.log(1 - 0.95)
@@ -271,8 +276,8 @@ class EKF_localization:
             ori = (self.rotation_matrix[1, 0]/abs(self.rotation_matrix[1, 0]))
 
         ori = ori * np.arccos(self.rotation_matrix[0, 0]/LA.norm(np.array([self.rotation_matrix[0, 0], self.rotation_matrix[1, 0], 0])))
-        
-        print(ori)
+
+        #print(ori)
 
         line_orient = np.concatenate((a, ori))
         return line
@@ -285,8 +290,8 @@ class EKF_localization:
         #and orientation
         map = self.map
         #map's size
-        length_map = map.shape[1]#no of columns
-        width_map = map.shape[0]#no of rows
+        length_map = self.map.shape[1]#no of columns
+        width_map = self.map.shape[0]#no of rows
 
         self.h = np.zeros((size_vector, 1))#vector to return with the distances
         middle = int(np.floor(size_vector/2))
@@ -312,10 +317,10 @@ class EKF_localization:
 
         #predicted position of the drone
         x_incr = self.act_state[0]
-        x_s = self.act_state[0]
-        y_s = self.act_state[2]
-        x_m = self.act_state[0]
-        y_m = self.act_state[2]
+        x_s = int(self.act_state[0])
+        y_s = int(self.act_state[2])
+        x_m = int(self.act_state[0])
+        y_m = int(self.act_state[2])
 
         for i in range(middle, size_vector-1):
 
@@ -524,7 +529,6 @@ class EKF_localization:
     def partial_jacobian1(self, xs1, ys1, xp1, yp1):
 
         d_h = np.zeros(6)
-
         d_h[0] = (xs1-xp1)/math.sqrt(np.power(xs1-xp1, 2)+np.power(ys1-yp1, 2))
         d_h[2] = (ys1-yp1)/math.sqrt(np.power(xs1-xp1, 2)+np.power(ys1-yp1, 2))
 
