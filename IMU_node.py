@@ -24,7 +24,7 @@ import numpy as np
 import roslib
 import sys
 import rospy
-from sensor_msgs.msg import Imu, MagnecticField
+from sensor_msgs.msg import Imu, MagneticField
 import smbus
 import time
 import struct
@@ -75,9 +75,6 @@ GYRO_AVERAGE_OFFSET_Z = 0
 
 
 
-#Initialization of the class
-Imu_sensor = IMU_measures()
-
 #-----------------------------------------------------------------------------
 #
 #   IMU_measures read the value of the bus provenient from the IMU
@@ -88,14 +85,14 @@ class IMU_measures:
 
     def __init__(self):
         self.accel_xyz = np.array([0.0, 0.0, 0.0])
-        self.gyros_xyz = np.array([0.0, 0.0, 0.0])
+        self.gyro_xyz = np.array([0.0, 0.0, 0.0])
         self.magn_xyz = np.array([0.0, 0.0, 0.0])
 
         self.initialization_IMU()
 
         #node of the IMU sensor to publish the IMU's data
         self.Imu_data_pub = rospy.Publisher('/imu/data_raw', Imu, queue_size = 10)
-        self.Imu_data_mag = rospy.Publisher('/imu/mag', MagnecticField, queue_size = 10)
+        self.Imu_data_mag = rospy.Publisher('/imu/mag', MagneticField, queue_size = 10)
 
     def initialization_IMU(self):
 
@@ -175,7 +172,7 @@ class IMU_measures:
 
     	return gyro
 
-    def get_magn():
+    def get_magn(self):
 
         magn = np.empty([3])
         magn_x = bytearray()
@@ -198,24 +195,31 @@ class IMU_measures:
 
     def compensate_sensor_errors(self):
 
-    	self.accel_xyz[0] = (accel_xyz[0] - ACCEL_X_OFFSET) * ACCEL_X_SCALE
-    	self.accel_xyz[1] = (accel_xyz[1] - ACCEL_Y_OFFSET) * ACCEL_Y_SCALE
-        self.accel_xyz[2] = (accel_xyz[2] - ACCEL_Z_OFFSET) * ACCEL_Z_SCALE
+    	self.accel_xyz[0] = (self.accel_xyz[0] - ACCEL_X_OFFSET) * ACCEL_X_SCALE
+    	self.accel_xyz[1] = (self.accel_xyz[1] - ACCEL_Y_OFFSET) * ACCEL_Y_SCALE
+        self.accel_xyz[2] = (self.accel_xyz[2] - ACCEL_Z_OFFSET) * ACCEL_Z_SCALE
 
-    	self.gyro_xyz[0] = (gyro_xyz[0] - GYRO_AVERAGE_OFFSET_X) * GYRO_GAIN
-    	self.gyro_xyz[1] = (gyro_xyz[1] - GYRO_AVERAGE_OFFSET_Y) * GYRO_GAIN
-    	self.gyro_xyz[2] = (gyro_xyz[2] - GYRO_AVERAGE_OFFSET_Z) * GYRO_GAIN
+    	self.gyro_xyz[0] = (self.gyro_xyz[0] - GYRO_AVERAGE_OFFSET_X) * GYRO_GAIN
+    	self.gyro_xyz[1] = (self.gyro_xyz[1] - GYRO_AVERAGE_OFFSET_Y) * GYRO_GAIN
+    	self.gyro_xyz[2] = (self.gyro_xyz[2] - GYRO_AVERAGE_OFFSET_Z) * GYRO_GAIN
 
         #convert from deg/s to rad/s (pi/180 = 0.0174532925)
         self.gyro_xyz[0] = self.gyro_xyz[0] * 0.0174532925
         self.gyro_xyz[1] = self.gyro_xyz[0] * 0.0174532925
         self.gyro_xyz[2] = self.gyro_xyz[0] * 0.0174532925
 
+
+        #self.magn_xyz[0] = (self.magn_xyz[0] - MAGN_X_OFFSET) * MAGN_X_SCALE
+        #self.magn_xyz[1] = (self.magn_xyz[1] - MAGN_Y_OFFSET) * MAGN_Y_SCALE
+        #self.magn_xyz[2] = (self.magn_xyz[2] - MAGN_Z_OFFSET) * MAGN_Z_SCALE
+
+
+
     def IMU_read(self):
 
-    	self.accel_xyz = get_accel()
-    	self.gyro_xyz = get_gyro()
-        self.magn_xyz = get_magn()
+    	self.accel_xyz = self.get_accel()
+    	self.gyro_xyz = self.get_gyro()
+        self.magn_xyz = self.get_magn()
         self.compensate_sensor_errors()
 
         self.publish_data()
@@ -224,35 +228,39 @@ class IMU_measures:
     def publish_data(self):
 
         data_pub = Imu()
-        data_pub_mag = MagnecticField()
+        data_pub_mag = MagneticField()
 
-		data_pub.angular_velocity.x = self.gyro_xyz[0] #gyros_x
-		data_pub.angular_velocity.y = self.gyro_xyz[1] #gyros_y
-		data_pub.angular_velocity.z = self.gyro_xyz[2] #gyros_z
+        data_pub.angular_velocity.x = self.gyro_xyz[0] #gyros_x
+        data_pub.angular_velocity.y = self.gyro_xyz[1] #gyros_y
+        data_pub.angular_velocity.z = self.gyro_xyz[2] #gyros_z
 
-		data_pub.angular_velocity_covariance[0] = 0
+        data_pub.angular_velocity_covariance[0] = 0
 
-		data_pub.linear_acceleration.x = self.accel_xyz[0] #accel_x
-		data_pub.linear_acceleration.y = self.accel_xyz[1] #accel_y
+        data_pub.linear_acceleration.x = self.accel_xyz[0] #accel_x
+        data_pub.linear_acceleration.y = self.accel_xyz[1] #accel_y
         data_pub.linear_acceleration.z = self.accel_xyz[2] #accel_z
 
-		data_pub.linear_acceleration_covariance[0] = 0
+        data_pub.linear_acceleration_covariance[0] = 0
 
-		data_pub_mag.magnetic_field.x = self.magn_xyz[0] #accel_x
-		data_pub_mag.magnetic_field.y = self.magn_xyz[1] #accel_y
+        data_pub_mag.magnetic_field.x = self.magn_xyz[0] #accel_x
+        data_pub_mag.magnetic_field.y = self.magn_xyz[1] #accel_y
         data_pub_mag.magnetic_field.z = self.magn_xyz[2] #accel_z
 
-		data_pub_mag.magnetic_field_covariance[0] = 0 #variance unknown
+        data_pub_mag.magnetic_field_covariance[0] = 0 #variance unknown
 
         self.Imu_data_pub.publish(data_pub)
         self.Imu_data_mag.publish(data_pub_mag)
 
 
 
+#Initialization of the class
+Imu_sensor = IMU_measures()
+
+
 
 def work_IMU():
-    Imu_sensor.IMU_read()
-    rospy.spin()
+    while not rospy.is_shutdown():
+        Imu_sensor.IMU_read()
 
 
 #-----------------------------------------------------------------------------
@@ -263,6 +271,7 @@ def work_IMU():
 if __name__ == '__main__':
     #try:
         rospy.init_node('imu', anonymous=True)
+        rate = rospy.Rate(10)
         work_IMU()
 
     #except rospy.RosInterruptException:
