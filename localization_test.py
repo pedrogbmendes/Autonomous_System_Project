@@ -155,7 +155,7 @@ class EKF_localization:
 		self.matrix_A[4][5] = self.delta_time
 
 		#print(self.prev_state)
-		print(self.pred_state)
+		print(self.prev_state)
 		#print(self.matrix_A)
 		self.pred_state = self.matrix_A.dot(self.prev_state)
 		self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R
