@@ -32,10 +32,12 @@ from transforms3d import quaternions
 import roslib
 import sys
 import rospy
-from sensor_msgs.msg import Image, Imu, MagnecticField
+from sensor_msgs.msg import Image, Imu, MagneticField
+from std_msgs.msg import String
 import time
 import math
-from PIL import Image
+from PIL import Image as img_pil
+from cv_bridge import CvBridge
 
 
 #-----------------------------------------------------------------------------I
@@ -44,9 +46,9 @@ from PIL import Image
 #
 #-----------------------------------------------------------------------------
 I = np.identity(6)
-cov_x = 1
-cov_y = 1
-cov_teta = 1
+cov_x = .1
+cov_y = .1
+cov_teta = .01
 matrix_R = np.array([[0,0,0,0,0,0],[0,cov_x,0,0,0,0],[0,0,0,0,0,0],[0,0,0,cov_y,0,0],[0,0,0,0,0,0],[0,0,0,0,0,cov_teta]])
 
 #Camera coordenate frames vectors
@@ -58,9 +60,9 @@ v_z = np.array([0,0,1])
 resolution = 50 #milimeters/pixel
 
 #INITIAL CONDITIONS
-x_init = 0
+x_init = 300
 vx_init = 0
-y_init = 0
+y_init = 90
 vy_init = 0
 orientation_init = 0
 ang_vel_init = 0
@@ -78,11 +80,11 @@ class EKF_localization:
     def __init__(self):
 
         #previous time
-        self.prev_time = 0
+        self.prev_time = rospy.get_time()
         #actual time
-        self.act_time = 0
+        self.act_time = rospy.get_time()
         #difference of time
-        self.delta_time = 0
+        self.delta_time = rospy.get_time()
         #previous state
         self.prev_state = np.array([[0],[0],[0],[0],[0],[0]])
         #actual state
@@ -111,15 +113,13 @@ class EKF_localization:
         self.h = 0
         #map
         self.map = self.openImage()
-
+        #matching threshold
         self.gama = 10
 
 
     def openImage(self):
 
-        np.set_printoptions(threshold=np.inf) #see all matrix
-
-        img = Image.open("map.pgm")
+        img = img_pil.open("map.pgm")
         area = (950, 950, 1600, 1130) #left, top, right, bottom
         cropped_img = img.crop(area)
         img_matrix = np.array(cropped_img)
@@ -138,10 +138,12 @@ class EKF_localization:
 
         self.predition_step()
 
+        #to convert the frame of teh camera in the correct byte size
+        self.bridge = CvBridge()
         #node of drone to Subscribe IMU data
-        self.subsIMU = rospy.Subscriber('/imu/data_raw',Imu,self.sub_pub_calRot)
+        self.subsIMU = rospy.Subscriber('/imu/data',Imu,self.sub_pub_calRot)
         #and to to Subscribe camera data
-        self.image_sub = rospy.Subscriber('/camera/depth/image',Image,self.save_image)
+        self.image_sub = rospy.Subscriber('/camera/depth/image_raw',Image,self.save_image)
         rate = rospy.Rate(10)
 
         rospy.spin()
@@ -149,28 +151,41 @@ class EKF_localization:
 
     def predition_step(self):
 
-        self.prev_time = self.act_time
-        self.act_time = rospy.Time.now()
+        self.prev_time = self.act_time + 0.0
+        self.act_time = rospy.get_time()
         self.delta_time = self.act_time - self.prev_time
 
 
-        self.matrix_A[0][1] = self.delta_time
-        self.matrix_A[2][3] = self.delta_time
-        self.matrix_A[4][5] = self.delta_time
+        self.matrix_A[0][1] = self.delta_time + 0.0
+        self.matrix_A[2][3] = self.delta_time + 0.0
+        self.matrix_A[4][5] = self.delta_time + 0.0
+
+        self.prev_state = self.act_state + 0.0
+        self.prev_cov = self.act_cov + 0.0
+
 
         self.pred_state = self.matrix_A.dot(self.prev_state)
+
+        if (self.pred_state[4] > np.pi):
+            self.pred_state[4] = self.pred_state[4] - 2 * np.pi * int(self.pred_state[4]/(2*np.pi)+1)
+        elif (self.pred_state[4] <= -np.pi):
+            self.pred_state[4] = 2 * np.pi * int(self.pred_state[4]/(2*np.pi)+1) - self.pred_state[4]
+
         self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R
+
 
     def matching_step(self, points):
 
         size_v = len(self.line_z)
+
         self.jacobian(size_v, points[0,:], points[1,:], points[2,:], points[3,:])
         self.matrix_Q = np.identity(size_v)
 
-        v = self.line_z - self.h
-        S = self.matrix_H.dot(self.pred_cov.dot(self.matrix_H.transpose()))+self.matrix_Q
-        match = v.transpose().dot(LA.inv(S).dot(v))
+        v_p = self.line_z - self.h
 
+        S = self.matrix_H.dot(self.pred_cov.dot(self.matrix_H.transpose()))+self.matrix_Q
+        match = v_p.transpose().dot(LA.inv(S).dot(v_p))
+        #print self.h.shape
         return match
 
 
@@ -186,11 +201,14 @@ class EKF_localization:
 
     def sub_pub_calRot(self, data):
         #subscribe the imu data (quaternions) and calculate the rotation matrix
-        self.rotation_matrix = quaternions.quat2mat(data)
+        quat = data.orientation
+        print data
+        quaternion = [quat.w, quat.x, quat.y, quat.z]
+        self.rotation_matrix = quaternions.quat2mat(quaternion)
 
 
     def save_image(self, photo):
-        self.frame = photo
+        self.frame = self.bridge.imgmsg_to_cv2(photo)
         self.line_z = self.take_frame_line()
 
         points = self.observation_model(len(self.line_z) )
@@ -203,7 +221,7 @@ class EKF_localization:
     def take_frame_line(self):
         #select the line
 
-        line = self.frame[320,:]
+        line = self.frame[240,100:600] + 0.0
 
         ori = 1
 
@@ -212,9 +230,10 @@ class EKF_localization:
 
         ori = ori * np.arccos(self.rotation_matrix[0, 0]/LA.norm(np.array([self.rotation_matrix[0, 0], self.rotation_matrix[1, 0], 0])))
 
-        print(ori)
+        line_aux = np.append([line], [ori])
+        line_orient = np.reshape(line_aux, (len(line_aux), 1))
 
-        line_orient = np.concatenate((a, ori))
+        print line_orient.shape
         return line_orient
 
 
@@ -229,224 +248,245 @@ class EKF_localization:
         width_map = self.map.shape[0]#no of rows
 
         self.h = np.zeros((size_vector, 1))#vector to return with the distances
-        middle = int(np.floor(size_vector/2))
+        middle = int(np.floor((size_vector-1)/2))
         points = np.zeros((4,size_vector-1))
         #first 2 rows are the points in the photo plane (xs,ys)
         #thrid and fourth row are the points of the object (xf,yf)
 
-        #all the angles are between -pi(exclusive) and pi(inclusive)
-        #predicted orientation of the drone
-        orient = self.act_state[4]
-        while orient <= -np.pi:
-            orient += 2*np.pi
-        while orient > np.pi:
-            orient -= 2*np.pi
+        if self.pred_state[0] in range(0, length_map-1) and self.pred_state[2] in range(0, width_map-1):
+            #position outside the map
+            points[0, 0] = self.pred_state[0] + 0.0
+            points[1, 0] = self.pred_state[2] + 0.0
+            points[2, 0] = 100000;
+            points[3, 0] = 100000;
 
-        margin_angle = np.pi/60
-        count_pixels = 1
-        distance_max = count_pixels * resolution
+            self.h = 1000000000*np.ones((size_vector, 1));
+        else:
 
-        #fill of view +- 29 degrees
-        incr_angle = (29.0*np.pi)/(180*(size_vector/2))
-        angle_incre = orient
+            #all the angles are between -pi(exclusive) and pi(inclusive)
+            #predicted orientation of the drone
+            orient = self.pred_state[4] + 0.0
+            while orient <= -np.pi:
+                orient += 2*np.pi
+            while orient > np.pi:
+                orient -= 2*np.pi
 
-        #predicted position of the drone
-        x_incr = self.act_state[0]
-        x_s = int(self.act_state[0])
-        y_s = int(self.act_state[2])
-        x_m = int(self.act_state[0])
-        y_m = int(self.act_state[2])
-
-        for i in range(middle, size_vector-1):
-
-            #prediction of position point by the camera
-            #Stops when find a obstacle or reachs the max range of camera (5 meters)
-            while map[y_m, x_m] == 0 and distance_max < 5000 and x_m in range(0, length_map) and y_m in range(0, width_map):
-                while angle_incre <= -np.pi:
-                    angle_incre += 2*np.pi
-                while angle_incre > np.pi:
-                    angle_incre -= 2*np.pi
-
-                #determine the increment that depends of the angle
-                #angle next to +- pi/2 the increment are small(slope of the tangent is high)
-                if angle_incre >= 0 and angle_incre <= np.pi/2:
-                    #first quadrant
-                    aux_yaw = angle_incre
-                elif angle_incre > np.pi/2 and angle_incre <=np.pi:
-                    #sendon quadrant
-                    aux_yaw = np.pi - angle_incre
-                elif angle_incre < 0 and angle_incre >= -np.pi/2:
-                    #fourth quadrant
-                    aux_yaw = -angle_incre
-                elif angle_incre >= -np.pi and angle_incre <-np.pi/2:
-                    #thrid quadrant
-                    aux_yaw = angle_incre + np.pi
-
-                if aux_yaw > np.pi/3 and aux_yaw < 7*np.pi/18:
-                    #between 60 and 70 degrees
-                    increment = 0.05
-                elif aux_yaw >= 7*np.pi/18 and aux_yaw < 8*np.pi/18:
-                    #between 70 and 80 degrees
-                    increment = 0.01
-                elif aux_yaw >= 8*np.pi/18 and aux_yaw < 85*np.pi/180:
-                    #between 80 an 85 degrees
-                    increment = 0.005
-                elif aux_yaw >= 85*np.pi/180 and aux_yaw <= np.pi/2:
-                    #between 85 an 90 degrees
-                    increment = 0.001
-                else:
-                    increment = 0.1
-
-                #straight line since the camere to the front
-                if angle_incre >= 0 and angle_incre < np.pi/2-margin_angle :
-                    #first quadrant
-                    x_incr = x_incr + increment
-                    x_m = int(x_incr)
-                    y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
-
-                elif angle_incre > np.pi/2+margin_angle  and angle_incre <= np.pi:
-                    #sencond quadrant
-                    x_incr = x_incr - increment
-                    x_m = int(x_incr)
-                    y_m = int(-np.tan(np.pi-angle_incre)*( x_s - x_incr ) + y_s)
-
-                elif angle_incre > -np.pi/2+margin_angle  and angle_incre < 0:
-                    #fourth quadrant
-                    x_incr = x_incr + increment
-                    x_m = int(x_incr)
-                    y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
-
-                elif angle_incre > -np.pi-margin_angle and angle_incre < -np.pi/2 :
-                    #third quadrant
-                    x_incr = x_incr - increment
-                    x_m = int(x_incr)
-                    y_m = int(-np.tan(-np.pi-angle_incre)*(x_s - x_incr) + y_s)
-
-                elif angle_incre > np.pi/2-margin_angle and angle_incre < np.pi/2+margin_angle:
-                    y_m = int(y_m - 1)
-
-                elif angle_incre > -np.pi/2-margin_angle and angle_incre < -np.pi/2+margin_angle:
-                    y_m = int(y_m + 1)
-
-                count_pixels += 1
-                distance_max = count_pixels * resolution * increment
-
-
-            p_radial = np.array([[x_s-x_m],[y_s-y_m]])
-            dis_radial = LA.norm(p_radial)
-            self.h[i] = resolution *dis_radial*np.cos(angle_incre-orient)
-
-            points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
-            points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
-            points[2, i] = x_m
-            points[3, i] = y_m
-
-            angle_incre -= incr_angle
-
+            margin_angle = np.pi/60
             count_pixels = 1
             distance_max = count_pixels * resolution
-            x_m = x_s
-            y_m = y_s
-            x_incr = x_s
+
+            #fill of view +- 29 degrees
+            incr_angle = (29.0*np.pi)/(180*((size_vector-1)/2))
+            angle_incre = orient + 0.0
+
+            #predicted position of the drone
+            x_incr = self.pred_state[0] + 0.0
+            x_s = int(self.pred_state[0]) + 0.0
+            y_s = int(self.pred_state[2]) + 0.0
+            x_m = int(self.pred_state[0]) + 0.0
+            y_m = int(self.pred_state[2]) + 0.0
+
+            if self.map[y_s, x_s] != 0:
+                #outside the free known space
+                points[0, 0] = self.pred_state[0] + 0.0
+                points[1, 0] = self.pred_state[2] + 0.0
+                points[2, 0] = 100000;
+                points[3, 0] = 100000;
 
 
-        count_pixels = 1
-        distance_max = count_pixels * resolution
-        angle_incre = orient + incr_angle
-        x_m = x_s
-        y_m = y_s
-        x_incr = x_s
+                self.h = 1000000000*np.ones((size_vector, 1));
+            else:
+
+                for i in range(middle, size_vector-1):
+
+                    #prediction of position point by the camera
+                    #Stops when find a obstacle or reachs the max range of camera (5 meters)
+                    while self.map[y_m, x_m] == 0 and distance_max < 5000 and x_m in range(0, length_map) and y_m in range(0, width_map):
+                        while angle_incre <= -np.pi:
+                            angle_incre += 2*np.pi
+                        while angle_incre > np.pi:
+                            angle_incre -= 2*np.pi
+
+                        #determine the increment that depends of the angle
+                        #angle next to +- pi/2 the increment are small(slope of the tangent is high)
+                        if angle_incre >= 0 and angle_incre <= np.pi/2:
+                            #first quadrant
+                            aux_yaw = angle_incre
+                        elif angle_incre > np.pi/2 and angle_incre <=np.pi:
+                            #sendon quadrant
+                            aux_yaw = np.pi - angle_incre
+                        elif angle_incre < 0 and angle_incre >= -np.pi/2:
+                            #fourth quadrant
+                            aux_yaw = -angle_incre
+                        elif angle_incre >= -np.pi and angle_incre <-np.pi/2:
+                            #thrid quadrant
+                            aux_yaw = angle_incre + np.pi
+
+                        if aux_yaw > np.pi/3 and aux_yaw < 7*np.pi/18:
+                            #between 60 and 70 degrees
+                            increment = 0.05
+                        elif aux_yaw >= 7*np.pi/18 and aux_yaw < 8*np.pi/18:
+                            #between 70 and 80 degrees
+                            increment = 0.01
+                        elif aux_yaw >= 8*np.pi/18 and aux_yaw < 85*np.pi/180:
+                            #between 80 an 85 degrees
+                            increment = 0.005
+                        elif aux_yaw >= 85*np.pi/180 and aux_yaw <= np.pi/2:
+                            #between 85 an 90 degrees
+                            increment = 0.001
+                        else:
+                            increment = 0.1
+
+                        #straight line since the camere to the front
+                        if angle_incre >= 0 and angle_incre < np.pi/2-margin_angle :
+                            #first quadrant
+                            x_incr = x_incr + increment
+                            x_m = int(x_incr)
+                            y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
+
+                        elif angle_incre > np.pi/2+margin_angle  and angle_incre <= np.pi:
+                            #sencond quadrant
+                            x_incr = x_incr - increment
+                            x_m = int(x_incr)
+                            y_m = int(-np.tan(np.pi-angle_incre)*( x_s - x_incr ) + y_s)
+
+                        elif angle_incre > -np.pi/2+margin_angle  and angle_incre < 0:
+                            #fourth quadrant
+                            x_incr = x_incr + increment
+                            x_m = int(x_incr)
+                            y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
+
+                        elif angle_incre > -np.pi-margin_angle and angle_incre < -np.pi/2 :
+                            #third quadrant
+                            x_incr = x_incr - increment
+                            x_m = int(x_incr)
+                            y_m = int(-np.tan(-np.pi-angle_incre)*(x_s - x_incr) + y_s)
+
+                        elif angle_incre > np.pi/2-margin_angle and angle_incre < np.pi/2+margin_angle:
+                            y_m = int(y_m - 1)
+
+                        elif angle_incre > -np.pi/2-margin_angle and angle_incre < -np.pi/2+margin_angle:
+                            y_m = int(y_m + 1)
+
+                        count_pixels += 1
+                        distance_max = count_pixels * resolution * increment
 
 
-        for j in range (middle-1, -1, -1):
-            while map[y_m, x_m] == 0 and distance_max < 5000 and x_m in range(0, length_map) and y_m in range(0, width_map):
-                while angle_incre <= -np.pi:
-                    angle_incre += 2*np.pi
-                while angle_incre > np.pi:
-                    angle_incre -= 2*np.pi
+                    p_radial = np.array([[x_s-x_m],[y_s-y_m]])
+                    dis_radial = LA.norm(p_radial)
+                    self.h[i] = resolution *dis_radial*np.cos(angle_incre-orient)
 
-                if angle_incre >= 0 and angle_incre <= np.pi/2:
-                    #first quadrant
-                    aux_yaw = angle_incre
-                elif angle_incre > np.pi/2 and angle_incre <=np.pi:
-                    #sendon quadrant
-                    aux_yaw = np.pi - angle_incre
-                elif angle_incre < 0 and angle_incre >= -np.pi/2:
-                    #fourth quadrant
-                    aux_yaw = -angle_incre
-                elif angle_incre >= -np.pi and angle_incre <-np.pi/2:
-                    #thrid quadrant
-                    aux_yaw = angle_incre + np.pi
+                    points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
+                    points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
+                    points[2, i] = x_m
+                    points[3, i] = y_m
 
-                if aux_yaw > np.pi/3 and aux_yaw < 7*np.pi/18:
-                    #between 60 and 70 degrees
-                    increment = 0.05
-                elif aux_yaw >= 7*np.pi/18 and aux_yaw < 8*np.pi/18:
-                    #between 70 and 80 degrees
-                    increment = 0.01
-                elif aux_yaw >= 8*np.pi/18 and aux_yaw < 85*np.pi/180:
-                    #between 80 an 85 degrees
-                    increment = 0.005
-                elif aux_yaw >= 85*np.pi/180 and aux_yaw <= np.pi/2:
-                    #between 85 an 90 degrees
-                    increment = 0.001
-                else:
-                    increment = 0.1
+                    angle_incre -= incr_angle
 
-                if angle_incre >= 0 and angle_incre < np.pi/2-margin_angle :
-                    #first quadrant
-                    x_incr = x_incr + increment
-                    x_m = int(x_incr)
-                    y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
-
-                elif angle_incre > np.pi/2+margin_angle  and angle_incre <= np.pi:
-                    #sencond quadrant
-                    x_incr = x_incr - increment
-                    x_m = int(x_incr)
-                    y_m = int(-np.tan(np.pi-angle_incre)*( x_s - x_incr ) + y_s)
-
-                elif angle_incre > -np.pi/2+margin_angle  and angle_incre < 0:
-                    #fourth quadrant
-                    x_incr = x_incr + increment
-                    x_m = int(x_incr)
-                    y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
-
-                elif angle_incre > -np.pi-margin_angle and angle_incre < -np.pi/2 :
-                    #third quadrant
-                    x_incr = x_incr - increment
-                    x_m = int(x_incr)
-                    y_m = int(-np.tan(-np.pi-angle_incre)*(x_s - x_incr) + y_s)
-
-                elif angle_incre > np.pi/2-margin_angle and angle_incre < np.pi/2+margin_angle:
-                    y_m = int(y_m - 1)
-
-                elif angle_incre > -np.pi/2-margin_angle and angle_incre < -np.pi/2+margin_angle:
-                    y_m = int(y_m + 1)
+                    count_pixels = 1
+                    distance_max = count_pixels * resolution
+                    x_m = x_s
+                    y_m = y_s
+                    x_incr = x_s
 
 
-                count_pixels += 1
-                distance_max = count_pixels * resolution * increment
+                count_pixels = 1
+                distance_max = count_pixels * resolution
+                angle_incre = orient + incr_angle
+                x_m = x_s
+                y_m = y_s
+                x_incr = x_s
 
 
-            p_radial = np.array([[x_s-x_m],[y_s-y_m]])
-            dis_radial = LA.norm(p_radial)
-            self.h[j] = resolution *dis_radial*np.cos(angle_incre-orient)
+                for j in range (middle-1, -1, -1):
+                    while self.map[y_m, x_m] == 0 and distance_max < 5000 and x_m in range(0, length_map) and y_m in range(0, width_map):
+                        while angle_incre <= -np.pi:
+                            angle_incre += 2*np.pi
+                        while angle_incre > np.pi:
+                            angle_incre -= 2*np.pi
 
-            points[0, j] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
-            points[1, j] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
-            points[2, j] = x_m
-            points[3, j] = y_m
+                        if angle_incre >= 0 and angle_incre <= np.pi/2:
+                            #first quadrant
+                            aux_yaw = angle_incre
+                        elif angle_incre > np.pi/2 and angle_incre <=np.pi:
+                            #sendon quadrant
+                            aux_yaw = np.pi - angle_incre
+                        elif angle_incre < 0 and angle_incre >= -np.pi/2:
+                            #fourth quadrant
+                            aux_yaw = -angle_incre
+                        elif angle_incre >= -np.pi and angle_incre <-np.pi/2:
+                            #thrid quadrant
+                            aux_yaw = angle_incre + np.pi
 
-            angle_incre += incr_angle
+                        if aux_yaw > np.pi/3 and aux_yaw < 7*np.pi/18:
+                            #between 60 and 70 degrees
+                            increment = 0.05
+                        elif aux_yaw >= 7*np.pi/18 and aux_yaw < 8*np.pi/18:
+                            #between 70 and 80 degrees
+                            increment = 0.01
+                        elif aux_yaw >= 8*np.pi/18 and aux_yaw < 85*np.pi/180:
+                            #between 80 an 85 degrees
+                            increment = 0.005
+                        elif aux_yaw >= 85*np.pi/180 and aux_yaw <= np.pi/2:
+                            #between 85 an 90 degrees
+                            increment = 0.001
+                        else:
+                            increment = 0.1
 
-            count_pixels = 1
-            distance_max = count_pixels * resolution
-            x_m = x_s
-            y_m = y_s
-            x_incr = x_s
+                        if angle_incre >= 0 and angle_incre < np.pi/2-margin_angle :
+                            #first quadrant
+                            x_incr = x_incr + increment
+                            x_m = int(x_incr)
+                            y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
+
+                        elif angle_incre > np.pi/2+margin_angle  and angle_incre <= np.pi:
+                            #sencond quadrant
+                            x_incr = x_incr - increment
+                            x_m = int(x_incr)
+                            y_m = int(-np.tan(np.pi-angle_incre)*( x_s - x_incr ) + y_s)
+
+                        elif angle_incre > -np.pi/2+margin_angle  and angle_incre < 0:
+                            #fourth quadrant
+                            x_incr = x_incr + increment
+                            x_m = int(x_incr)
+                            y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
+
+                        elif angle_incre > -np.pi-margin_angle and angle_incre < -np.pi/2 :
+                            #third quadrant
+                            x_incr = x_incr - increment
+                            x_m = int(x_incr)
+                            y_m = int(-np.tan(-np.pi-angle_incre)*(x_s - x_incr) + y_s)
+
+                        elif angle_incre > np.pi/2-margin_angle and angle_incre < np.pi/2+margin_angle:
+                            y_m = int(y_m - 1)
+
+                        elif angle_incre > -np.pi/2-margin_angle and angle_incre < -np.pi/2+margin_angle:
+                            y_m = int(y_m + 1)
+
+
+                        count_pixels += 1
+                        distance_max = count_pixels * resolution * increment
+
+
+                    p_radial = np.array([[x_s-x_m],[y_s-y_m]])
+                    dis_radial = LA.norm(p_radial)
+                    self.h[j] = resolution *dis_radial*np.cos(angle_incre-orient)
+
+                    points[0, j] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
+                    points[1, j] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
+                    points[2, j] = x_m
+                    points[3, j] = y_m
+
+                    angle_incre += incr_angle
+
+                    count_pixels = 1
+                    distance_max = count_pixels * resolution
+                    x_m = x_s
+                    y_m = y_s
+                    x_incr = x_s
 
         #predited orientation
-        self.h[size_vector-1] = self.act_state[4]
+        self.h[size_vector-1] = self.pred_state[4] + 0.0
 
         return points
 
@@ -465,10 +505,15 @@ class EKF_localization:
 
         d_h = np.zeros(6)
 
-        d_h[0] = (xs1-xp1)/math.sqrt(np.power(xs1-xp1, 2)+np.power(ys1-yp1, 2))
-        d_h[2] = (ys1-yp1)/math.sqrt(np.power(xs1-xp1, 2)+np.power(ys1-yp1, 2))
+        if xs1 == xp1 and ys1 == yp1:
+            d_h[0] = 0
+            d_h[2] = 0
+        else:
+            d_h[0] = (xs1-xp1)/math.sqrt(np.power(xs1-xp1, 2)+np.power(ys1-yp1, 2))
+            d_h[2] = (ys1-yp1)/math.sqrt(np.power(xs1-xp1, 2)+np.power(ys1-yp1, 2))
 
         return d_h
+
 
     def partial_jacobian2(self):
 
@@ -486,10 +531,8 @@ class EKF_localization:
 #-----------------------------------------------------------------------------
 if __name__ == '__main__':
     #try:
-
-        prog = EKF_localization()
-
         rospy.init_node('drone', anonymous=True)
+        prog = EKF_localization()
         prog.robot_localization()
 
 

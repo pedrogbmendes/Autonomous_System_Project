@@ -153,17 +153,17 @@ class EKF_localization:
             if(ct > 0):
                 ct = 0
 
-            print(self.prev_state);
+            #print(self.prev_state);
 
-            ys = self.prev_state[2] +0.0
-            xs = self.prev_state[0] +0.0
+            ys = self.act_state[2] +0.0
+            xs = self.act_state[0] +0.0
 
             plt.ion()
             fig=plt.figure(1)
             pl.figure(1)
             ax = fig.add_subplot(111)
             line1, = ax.plot(xr[ct], yr[ct], 'ro')
-            
+
             line1, = ax.plot(xs-50, 50-ys, 'go')
 
             s = -2 * math.log(1 - 0.95)
@@ -194,7 +194,7 @@ class EKF_localization:
             self.line_z = np.concatenate((dm,orir))
 
             points = self.observation_model(len(self.line_z))
-            
+
             if(self.matching_step(points).all() <= self.gama):
                 self.update_step()
 
@@ -225,7 +225,7 @@ class EKF_localization:
         elif (self.pred_state[4] <= -np.pi):
             self.pred_state[4] = 2 * np.pi * int(self.pred_state[4]/(2*np.pi)+1) - self.pred_state[4]
 
-        
+
 
         self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R +0.0
 
@@ -239,12 +239,12 @@ class EKF_localization:
         self.matrix_Q = np.identity(size_v)
 
         v_p = self.line_z - self.h +0.0
-        print(self.line_z)
-        print(self.h)
+        #print(self.line_z)
+        #print(self.h)
 
         S = self.matrix_H.dot(self.pred_cov.dot(self.matrix_H.transpose()))+self.matrix_Q +0.0
         match = v_p.transpose().dot(LA.inv(S).dot(v_p))
-        
+
 
         return match
 
@@ -257,9 +257,9 @@ class EKF_localization:
 
         self.act_state = self.pred_state + k.dot(self.line_z - self.h) +0.0
         self.act_cov = (I - k.dot(self.matrix_H)).dot(self.pred_cov) +0.0
- 
-        
-        
+
+
+
 
 
     def sub_pub_calRot(self, data):
@@ -268,7 +268,7 @@ class EKF_localization:
 
 
     def save_image(self, photo):
-        self.frame = photo 
+        self.frame = photo
         self.line_z = self.take_frame_line()
 
         points = self.observation_model(len(self.line_z) )
@@ -307,7 +307,7 @@ class EKF_localization:
         width_map = self.map.shape[0]#no of rows
 
         self.h = np.zeros((size_vector, 1))#vector to return with the distances
-        middle = int(np.floor(size_vector/2))
+        middle = int(np.floor((size_vector-1)/2))
         points = np.zeros((4,size_vector-1))
 
         orient = self.pred_state[4]+0.0
@@ -321,13 +321,13 @@ class EKF_localization:
             self.h[0] = 1000000000;
         else:
 
-            
+
             #first 2 rows are the points in the photo plane (xs,ys)
             #thrid and fourth row are the points of the object (xf,yf)
 
             #all the angles are between -pi(exclusive) and pi(inclusive)
             #predicted orientation of the drone
-            
+
             while orient <= -np.pi:
                 orient += 2*np.pi
             while orient > np.pi:
@@ -427,7 +427,7 @@ class EKF_localization:
 
                 p_radial = np.array([[x_s-x_m],[y_s-y_m]])
                 dis_radial = LA.norm(p_radial)
-                print(i)
+
                 self.h[i] = resolution *dis_radial*np.cos(angle_incre-orient)
 
                 points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
@@ -541,7 +541,8 @@ class EKF_localization:
 
         #predited orientation
         self.h[size_vector-1] = self.pred_state[4] +0.0
-
+        print self.h
+        time.sleep(2)
         return points
 
 
