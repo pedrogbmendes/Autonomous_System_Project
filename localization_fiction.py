@@ -73,7 +73,7 @@ np.set_printoptions(threshold=4)
 xr = [10]
 yr = [-10]
 orir = np.array([[-np.pi/4]])
-dm = np.array([[0.84], [1.41], [0.84]])
+dm = np.array([[0.91], [1.41], [0.91]])
 
 global ct
 ct = 0
@@ -153,10 +153,10 @@ class EKF_localization:
             if(ct > 0):
                 ct = 0
 
-            print(self.act_state);
+            print(self.prev_state);
 
-            ys = self.act_state[2]
-            xs = self.act_state[0]
+            ys = self.prev_state[2] +0.0
+            xs = self.prev_state[0] +0.0
 
             plt.ion()
             fig=plt.figure(1)
@@ -206,19 +206,19 @@ class EKF_localization:
 
     def predition_step(self):
 
-        self.prev_time = self.act_time
+        self.prev_time = self.act_time + 0.0
         self.act_time +=1
-        self.delta_time = self.act_time - self.prev_time
+        self.delta_time = self.act_time - self.prev_time +0.0
 
 
-        self.matrix_A[0][1] = self.delta_time
-        self.matrix_A[2][3] = self.delta_time
-        self.matrix_A[4][5] = self.delta_time
+        self.matrix_A[0][1] = self.delta_time +0.0
+        self.matrix_A[2][3] = self.delta_time +0.0
+        self.matrix_A[4][5] = self.delta_time +0.0
 
-        self.prev_state = self.act_state
-        self.prev_cov = self.act_cov
+        self.prev_state = self.act_state +0.0
+        self.prev_cov = self.act_cov +0.0
 
-        self.pred_state = self.matrix_A.dot(self.prev_state)
+        self.pred_state = self.matrix_A.dot(self.prev_state) +0.0
 
         if (self.pred_state[4] > np.pi):
             self.pred_state[4] = self.pred_state[4] - 2 * np.pi * int(self.pred_state[4]/(2*np.pi)+1)
@@ -227,7 +227,7 @@ class EKF_localization:
 
         
 
-        self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R
+        self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R +0.0
 
 
     def matching_step(self, points):
@@ -238,11 +238,11 @@ class EKF_localization:
         self.jacobian(size_v, points[0,:], points[1,:], points[2,:], points[3,:])
         self.matrix_Q = np.identity(size_v)
 
-        v_p = self.line_z - self.h
+        v_p = self.line_z - self.h +0.0
         print(self.line_z)
         print(self.h)
 
-        S = self.matrix_H.dot(self.pred_cov.dot(self.matrix_H.transpose()))+self.matrix_Q
+        S = self.matrix_H.dot(self.pred_cov.dot(self.matrix_H.transpose()))+self.matrix_Q +0.0
         match = v_p.transpose().dot(LA.inv(S).dot(v_p))
         
 
@@ -255,9 +255,9 @@ class EKF_localization:
 
         k = (self.pred_cov.dot(self.matrix_H.transpose())).dot(LA.inv((self.matrix_H.dot(self.pred_cov)).dot(self.matrix_H.transpose()) + self.matrix_Q))
 
-        self.act_state = self.pred_state + k.dot(self.line_z - self.h)
-        self.act_cov = (I - k.dot(self.matrix_H)).dot(self.pred_cov)
-
+        self.act_state = self.pred_state + k.dot(self.line_z - self.h) +0.0
+        self.act_cov = (I - k.dot(self.matrix_H)).dot(self.pred_cov) +0.0
+ 
         
         
 
@@ -268,7 +268,7 @@ class EKF_localization:
 
 
     def save_image(self, photo):
-        self.frame = photo
+        self.frame = photo 
         self.line_z = self.take_frame_line()
 
         points = self.observation_model(len(self.line_z) )
@@ -310,11 +310,11 @@ class EKF_localization:
         middle = int(np.floor(size_vector/2))
         points = np.zeros((4,size_vector-1))
 
-        orient = self.act_state[4]
+        orient = self.pred_state[4]+0.0
 
-        if (self.act_state[0] > 69 or self.act_state[0] < 29 or self.act_state[2] > 69 or self.act_state[0] < 29):
-            points[0, 0] = self.act_state[0]
-            points[1, 0] = self.act_state[2]
+        if (self.pred_state[0] > 69 or self.pred_state[0] < 29 or self.pred_state[2] > 69 or self.pred_state[2] < 29):
+            points[0, 0] = self.pred_state[0] +0.0
+            points[1, 0] = self.pred_state[2] +0.0
             points[2, 0] = 100000;
             points[3, 0] = 100000;
 
@@ -338,15 +338,15 @@ class EKF_localization:
             distance_max = count_pixels * resolution
 
             #field of view +- 29 degrees
-            incr_angle = (29.0*np.pi)/(180*(size_vector/2))
-            angle_incre = orient
+            incr_angle = (29.0*np.pi)/(180*((size_vector-1)/2))
+            angle_incre = orient + 0.0
 
             #predicted position of the drone
-            x_incr = self.act_state[0]
-            x_s = int(self.act_state[0])
-            y_s = int(self.act_state[2])
-            x_m = int(self.act_state[0])
-            y_m = int(self.act_state[2])
+            x_incr = self.pred_state[0] +0.0
+            x_s = int(self.pred_state[0]) +0
+            y_s = int(self.pred_state[2]) +0
+            x_m = int(self.pred_state[0]) +0
+            y_m = int(self.pred_state[2]) +0
 
 
 
@@ -427,6 +427,7 @@ class EKF_localization:
 
                 p_radial = np.array([[x_s-x_m],[y_s-y_m]])
                 dis_radial = LA.norm(p_radial)
+                print(i)
                 self.h[i] = resolution *dis_radial*np.cos(angle_incre-orient)
 
                 points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
@@ -539,7 +540,7 @@ class EKF_localization:
                 x_incr = x_s
 
         #predited orientation
-        self.h[size_vector-1] = self.act_state[4]
+        self.h[size_vector-1] = self.pred_state[4] +0.0
 
         return points
 
