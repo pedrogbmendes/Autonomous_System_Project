@@ -62,21 +62,24 @@ v_z = np.array([0,0,1])
 resolution = 0.1 #meters/pixel
 
 #INITIAL CONDITIONS
-x_init = 61
+x_init = 50
 vx_init = 0
-y_init = 59
+y_init = 50
 vy_init = 0
-orientation_init = -np.pi/4
+orientation_init = 0
 ang_vel_init = 0
 
 np.set_printoptions(threshold=4)
-xr = [10]
-yr = [-10]
-orir = np.array([[-np.pi/4]])
-dm = np.array([[0.91], [1.41], [0.91]])
+xr = [0, -5, -5, -5, 0, 5, 10, 15, 15, 15, 15, 10, 6, -5, -10, -10]
+yr = [0, 0, 5, 10, 15, 15, 15, 15, 10, 5, -5, -5, -5, -4, -10, 0]
+orir = np.array([0, np.pi/4, np.pi/2, 3*np.pi/4, np.pi/2, np.pi/4, np.pi/6, 0, -np.pi/6, -np.pi/4, -np.pi/4, -np.pi/3, -np.pi/2, -np.pi/2, -3*np.pi/4, np.pi])
+dm = np.array([3, 2.82, 1.5, 1.41, .5, .705, 1.0, .5, .58, .705, .705, 1.73, 1.5, 1.6, 1.41, 1.0])
 
 global ct
 ct = 0
+
+global c
+c = 0
 
 global no_update
 no_update = 0
@@ -152,16 +155,14 @@ class EKF_localization:
         while(1):
 
             global ct
-            if(ct > 0):
-                ct = 0
+            global c
+            if(ct > 15):
+                ct = 15
 
             print(self.act_state);
 
             ys = self.act_state[2] +0.0
             xs = self.act_state[0] +0.0
-
-            endy = 50-ys +(6* math.sin(self.pred_state[4]))
-            endx = xs-50 +(6* math.cos(self.pred_state[4]))
 
             plt.ion()
             fig=plt.figure(1)
@@ -173,11 +174,7 @@ class EKF_localization:
 
             s = -2 * math.log(1 - 0.95)
             w, v=LA.eig(self.pred_cov*s)
-            ax.plot([xs-50, endx], [50-ys, endy])
-            ax.plot([-20, 20], [-20, -20], 'b')
-            ax.plot([-20, 20], [20, 20], 'b')
-            ax.plot([-20, -20], [-20, 20], 'b')
-            ax.plot([20, 20], [-20, 20], 'b')
+
             t = np.linspace(0, 2*math.pi, 100)
             plt.plot( -50+xs+w[1]*np.cos(t) , 50-ys+w[2]*np.sin(t) )
             plt.grid(color='lightgray',linestyle='--')
@@ -200,7 +197,7 @@ class EKF_localization:
         # rate = rospy.Rate(10)
 
         # rospy.spin()
-            self.line_z = np.concatenate((dm,orir))
+            self.line_z = np.concatenate(([[dm[ct]]],[[orir[ct]]]))
 
             points = self.observation_model(len(self.line_z))
 
@@ -209,7 +206,11 @@ class EKF_localization:
                     self.update_step()
 
             #global ct
-            ct += 1
+            if (c == 20):
+                ct += 1
+                c = 0
+
+            c += 1
 
 
 
@@ -244,13 +245,13 @@ class EKF_localization:
 
         size_v = len(self.line_z)
 
+
         #time.sleep(1)
         self.jacobian(size_v, points[0,:], points[1,:], points[2,:], points[3,:])
         self.matrix_Q = np.identity(size_v)
 
         v_p = self.line_z - self.h +0.0
-        print(self.line_z)
-        print(self.h)
+        print(v_p)
 
         S = self.matrix_H.dot(self.pred_cov.dot(self.matrix_H.transpose()))+self.matrix_Q +0.0
         match = v_p.transpose().dot(LA.inv(S).dot(v_p))
@@ -320,9 +321,10 @@ class EKF_localization:
         middle = int(np.floor((size_vector-1)/2))
         points = np.zeros((4,size_vector-1))
 
+        
         orient = self.pred_state[4]+0.0
-        print(map[int(self.pred_state[2]), int(self.pred_state[0])])
         if (map[int(self.pred_state[2]), int(self.pred_state[0])] != 0):
+            print ("1234")
             global no_update
             no_update = 1
         else:
@@ -344,7 +346,10 @@ class EKF_localization:
             distance_max = count_pixels * resolution
 
             #field of view +- 29 degrees
-            incr_angle = (29.0*np.pi)/(180*((size_vector-1)/2))
+            if(size_vector == 2):
+                incr_angle = 0;
+            else:
+                incr_angle = (29.0*np.pi)/(180*((size_vector-1)/2))
             angle_incre = orient + 0.0
 
             #predicted position of the drone
@@ -545,11 +550,10 @@ class EKF_localization:
                 y_m = y_s
                 x_incr = x_s
 
-        #predited orientation
-        self.h[size_vector-1] = self.pred_state[4] +0.0
-        
-        time.sleep(1)
-        return points
+            #predited orientation
+            self.h[size_vector-1] = self.pred_state[4] +0.0
+            
+            return points
 
 
     def jacobian(self, size_vector, xs, ys, xp, yp):
