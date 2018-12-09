@@ -38,7 +38,11 @@ import time
 import math
 from PIL import Image as img_pil
 from cv_bridge import CvBridge
-
+#for plot the results
+from matplotlib import colors
+import matplotlib.animation as anim
+import pylab as pl
+import matplotlib.pyplot as plt
 
 #-----------------------------------------------------------------------------I
 #
@@ -66,6 +70,10 @@ y_init = 90
 vy_init = 0
 orientation_init = 0
 ang_vel_init = 0
+
+#matching step
+global no_update
+no_update = 0
 
 np.set_printoptions(threshold=4)
 
@@ -100,7 +108,7 @@ class EKF_localization:
         #predicted covariance
         self.pred_cov = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
         #Jacobian matrix
-        self.matrix_H = np.zeros((1, 6))
+        self.matrix_H = np.zeros((2, 6))
         #covariance of noise observation matrix
         self.matrix_Q = np.identity(2)
         #rotation matrix
@@ -136,8 +144,6 @@ class EKF_localization:
 
     def robot_localization(self):
 
-        self.predition_step()
-
         #to convert the frame of teh camera in the correct byte size
         self.bridge = CvBridge()
         #node of drone to Subscribe IMU data
@@ -147,6 +153,8 @@ class EKF_localization:
         rate = rospy.Rate(10)
 
         rospy.spin()
+
+
 
 
     def predition_step(self):
@@ -185,7 +193,7 @@ class EKF_localization:
 
         S = self.matrix_H.dot(self.pred_cov.dot(self.matrix_H.transpose()))+self.matrix_Q
         match = v_p.transpose().dot(LA.inv(S).dot(v_p))
-        #print self.h.shape
+
         return match
 
 
@@ -202,18 +210,48 @@ class EKF_localization:
     def sub_pub_calRot(self, data):
         #subscribe the imu data (quaternions) and calculate the rotation matrix
         quat = data.orientation
-        print data
         quaternion = [quat.w, quat.x, quat.y, quat.z]
         self.rotation_matrix = quaternions.quat2mat(quaternion)
 
 
+
+
     def save_image(self, photo):
+
+        self.predition_step()
+    
+
         self.frame = self.bridge.imgmsg_to_cv2(photo)
         self.line_z = self.take_frame_line()
 
         points = self.observation_model(len(self.line_z) )
-        if(self.matching_step(points) <= self.gama):
-            self.update_step()
+        if(no_update == 0):
+            if(self.matching_step(points) <= self.gama):
+
+                self.update_step()
+        elif no_update == 10:
+            #the robot is lost
+            #solve the kidnapping
+            self.__init__()
+
+        plt.ion()
+        fig=plt.figure(1)
+        pl.figure(1)
+
+        ax = fig.add_subplot(111)
+
+        cmap = colors.ListedColormap(['grey','black', 'yellow'])
+        ax.pcolor(self.map[::-1], cmap=cmap, edgecolors='k')
+
+
+
+
+        x_plot = self.act_state[0]
+        y_plot = 179 - self.act_state[2]
+        ax.plot(x_plot,y_plot, 'ro')
+
+        fig.canvas.draw()
+        plt.gcf().clear()
 
 
 
@@ -228,14 +266,17 @@ class EKF_localization:
         if self.rotation_matrix[1, 0] != 0:
             ori = (self.rotation_matrix[1, 0]/abs(self.rotation_matrix[1, 0]))
 
-        ori = ori * np.arccos(self.rotation_matrix[0, 0]/LA.norm(np.array([self.rotation_matrix[0, 0], self.rotation_matrix[1, 0], 0])))
+        v_n = np.zeros((3,1))
+        v_n[0] = self.rotation_matrix[0, 0]
+        v_n[1] = self.rotation_matrix[1, 0]
+        v_n[2] = 0
+
+        ori = ori * np.arccos(self.rotation_matrix[0, 0]/LA.norm(v_n))
 
         line_aux = np.append([line], [ori])
         line_orient = np.reshape(line_aux, (len(line_aux), 1))
 
-        print line_orient.shape
         return line_orient
-
 
 
     def observation_model(self, size_vector):
@@ -252,15 +293,12 @@ class EKF_localization:
         points = np.zeros((4,size_vector-1))
         #first 2 rows are the points in the photo plane (xs,ys)
         #thrid and fourth row are the points of the object (xf,yf)
+        global no_update
 
         if self.pred_state[0] in range(0, length_map-1) and self.pred_state[2] in range(0, width_map-1):
             #position outside the map
-            points[0, 0] = self.pred_state[0] + 0.0
-            points[1, 0] = self.pred_state[2] + 0.0
-            points[2, 0] = 100000;
-            points[3, 0] = 100000;
+            no_update += 1;
 
-            self.h = 1000000000*np.ones((size_vector, 1));
         else:
 
             #all the angles are between -pi(exclusive) and pi(inclusive)
@@ -288,14 +326,11 @@ class EKF_localization:
 
             if self.map[y_s, x_s] != 0:
                 #outside the free known space
-                points[0, 0] = self.pred_state[0] + 0.0
-                points[1, 0] = self.pred_state[2] + 0.0
-                points[2, 0] = 100000;
-                points[3, 0] = 100000;
+                no_update += 1;
 
-
-                self.h = 1000000000*np.ones((size_vector, 1));
             else:
+
+                no_update = 0;
 
                 for i in range(middle, size_vector-1):
 
