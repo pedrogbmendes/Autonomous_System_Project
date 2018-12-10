@@ -42,6 +42,12 @@ accel_address = 0x53 # accelerometer I2C address
 gyro_address = 0x68  # gyroscope I2C address
 magn_address = 0x1e  # magnetometer I2C address
 
+
+accel_xyz = np.empty([3])
+gyro_xyz = np.empty([3])
+magn_xyz = np.empty([3])
+
+
 #calibration of IMU
 ACCEL_X_SCALE = 0.004
 ACCEL_Y_SCALE = 0.004
@@ -60,18 +66,18 @@ GYRO_AVERAGE_OFFSET_Y = 0
 GYRO_AVERAGE_OFFSET_Z = 0
 
 # Manual magnetometer calibration
-#MAGN_X_MAX = 430
-#MAGN_X_MIN = -415
-#MAGN_Y_MAX = 520
-#MAGN_Y_MIN = -530
-#MAGN_Z_MAX = 355
-#MAGN_Z_MIN = -431
-#MAGN_X_OFFSET = (MAGN_X_MIN + MAGN_X_MAX) / 2.
-#MAGN_Y_OFFSET = (MAGN_Y_MIN + MAGN_Y_MAX) / 2.
-#MAGN_Z_OFFSET = (MAGN_Z_MIN + MAGN_Z_MAX) / 2.
-#MAGN_X_SCALE = 100. / (MAGN_X_MAX - MAGN_X_OFFSET)
-#MAGN_Y_SCALE = 100. / (MAGN_Y_MAX - MAGN_Y_OFFSET)
-#MAGN_Z_SCALE = 100. / (MAGN_Z_MAX - MAGN_Z_OFFSET)
+MAGN_X_MAX = 430
+MAGN_X_MIN = -415
+MAGN_Y_MAX = 520
+MAGN_Y_MIN = -530
+MAGN_Z_MAX = 355
+MAGN_Z_MIN = -431
+MAGN_X_OFFSET = (MAGN_X_MIN + MAGN_X_MAX) / 2.
+MAGN_Y_OFFSET = (MAGN_Y_MIN + MAGN_Y_MAX) / 2.
+MAGN_Z_OFFSET = (MAGN_Z_MIN + MAGN_Z_MAX) / 2.
+MAGN_X_SCALE = 100. / (MAGN_X_MAX - MAGN_X_OFFSET)
+MAGN_Y_SCALE = 100. / (MAGN_Y_MAX - MAGN_Y_OFFSET)
+MAGN_Z_SCALE = 100. / (MAGN_Z_MAX - MAGN_Z_OFFSET)
 
 
 
@@ -84,12 +90,6 @@ GYRO_AVERAGE_OFFSET_Z = 0
 class IMU_measures:
 
     def __init__(self):
-        self.accel_xyz = np.array([0.0, 0.0, 0.0])
-        self.gyro_xyz = np.array([0.0, 0.0, 0.0])
-        self.magn_xyz = np.array([0.0, 0.0, 0.0])
-
-        self.initialization_IMU()
-
         #node of the IMU sensor to publish the IMU's data
         self.Imu_data_pub = rospy.Publisher('/imu/data_raw', Imu, queue_size = 10)
         self.Imu_data_mag = rospy.Publisher('/imu/mag', MagneticField, queue_size = 10)
@@ -195,31 +195,33 @@ class IMU_measures:
 
     def compensate_sensor_errors(self):
 
-    	self.accel_xyz[0] = (self.accel_xyz[0] - ACCEL_X_OFFSET) * ACCEL_X_SCALE
-    	self.accel_xyz[1] = (self.accel_xyz[1] - ACCEL_Y_OFFSET) * ACCEL_Y_SCALE
-        self.accel_xyz[2] = (self.accel_xyz[2] - ACCEL_Z_OFFSET) * ACCEL_Z_SCALE
+        global accel_xyz
+        global gyro_xyz
+        global magn_xyz
 
-    	self.gyro_xyz[0] = (self.gyro_xyz[0] - GYRO_AVERAGE_OFFSET_X) * GYRO_GAIN
-    	self.gyro_xyz[1] = (self.gyro_xyz[1] - GYRO_AVERAGE_OFFSET_Y) * GYRO_GAIN
-    	self.gyro_xyz[2] = (self.gyro_xyz[2] - GYRO_AVERAGE_OFFSET_Z) * GYRO_GAIN
+    	accel_xyz[0] = (accel_xyz[0] - ACCEL_X_OFFSET) * ACCEL_X_SCALE
+    	accel_xyz[1] = (accel_xyz[1] - ACCEL_Y_OFFSET) * ACCEL_Y_SCALE
+        accel_xyz[2] = (accel_xyz[2] - ACCEL_Z_OFFSET) * ACCEL_Z_SCALE
 
-        #convert from deg/s to rad/s (pi/180 = 0.0174532925)
-        self.gyro_xyz[0] = self.gyro_xyz[0] * 0.0174532925
-        self.gyro_xyz[1] = self.gyro_xyz[0] * 0.0174532925
-        self.gyro_xyz[2] = self.gyro_xyz[0] * 0.0174532925
+    	gyro_xyz[0] = (gyro_xyz[0] - GYRO_AVERAGE_OFFSET_X) * GYRO_GAIN
+    	gyro_xyz[1] = (gyro_xyz[1] - GYRO_AVERAGE_OFFSET_Y) * GYRO_GAIN
+    	gyro_xyz[2] = (gyro_xyz[2] - GYRO_AVERAGE_OFFSET_Z) * GYRO_GAIN
 
-
-        #self.magn_xyz[0] = (self.magn_xyz[0] - MAGN_X_OFFSET) * MAGN_X_SCALE
-        #self.magn_xyz[1] = (self.magn_xyz[1] - MAGN_Y_OFFSET) * MAGN_Y_SCALE
-        #self.magn_xyz[2] = (self.magn_xyz[2] - MAGN_Z_OFFSET) * MAGN_Z_SCALE
+        magn_xyz[0] = (magn_xyz[0] - MAGN_X_OFFSET) * MAGN_X_SCALE
+        magn_xyz[1] = (magn_xyz[1] - MAGN_Y_OFFSET) * MAGN_Y_SCALE
+        magn_xyz[2] = (magn_xyz[2] - MAGN_Z_OFFSET) * MAGN_Z_SCALE
 
 
 
     def IMU_read(self):
 
-    	self.accel_xyz = self.get_accel()
-    	self.gyro_xyz = self.get_gyro()
-        self.magn_xyz = self.get_magn()
+        global accel_xyz
+        global gyro_xyz
+        global magn_xyz
+
+    	accel_xyz = self.get_accel()
+    	gyro_xyz = self.get_gyro()
+        magn_xyz = self.get_magn()
         self.compensate_sensor_errors()
 
         self.publish_data()
@@ -230,21 +232,27 @@ class IMU_measures:
         data_pub = Imu()
         data_pub_mag = MagneticField()
 
-        data_pub.angular_velocity.x = self.gyro_xyz[0] #gyros_x
-        data_pub.angular_velocity.y = self.gyro_xyz[1] #gyros_y
-        data_pub.angular_velocity.z = self.gyro_xyz[2] #gyros_z
+        data_pub.header.stamp = rospy.get_rostime()
+        data_pub_mag.header.stamp = rospy.get_rostime()
+
+        #convert from g to m/s²
+        data_pub.angular_velocity.x = gyro_xyz[0]* 0.0174532925  #gyros_x
+        data_pub.angular_velocity.y = gyro_xyz[1]* 0.0174532925  #gyros_y
+        data_pub.angular_velocity.z = gyro_xyz[2]* 0.0174532925  #gyros_z
 
         data_pub.angular_velocity_covariance[0] = 0
 
-        data_pub.linear_acceleration.x = self.accel_xyz[0] #accel_x
-        data_pub.linear_acceleration.y = self.accel_xyz[1] #accel_y
-        data_pub.linear_acceleration.z = self.accel_xyz[2] #accel_z
+        #convert from deg/s to rad/s (pi/180 = 0.0174532925)
+        data_pub.linear_acceleration.x = accel_xyz[0]*9.81 #accel_x
+        data_pub.linear_acceleration.y = accel_xyz[1]*9.81#accel_y
+        data_pub.linear_acceleration.z = accel_xyz[2]*9.81 #accel_z
 
         data_pub.linear_acceleration_covariance[0] = 0
 
-        data_pub_mag.magnetic_field.x = self.magn_xyz[0] #accel_x
-        data_pub_mag.magnetic_field.y = self.magn_xyz[1] #accel_y
-        data_pub_mag.magnetic_field.z = self.magn_xyz[2] #accel_z
+        #convert from Guass to Tesla
+        data_pub_mag.magnetic_field.x = magn_xyz[0]*0.0001 #accel_x
+        data_pub_mag.magnetic_field.y = magn_xyz[1]*0.0001 #accel_y
+        data_pub_mag.magnetic_field.z = magn_xyz[2]*0.0001 #accel_z
 
         data_pub_mag.magnetic_field_covariance[0] = 0 #variance unknown
 
@@ -255,7 +263,7 @@ class IMU_measures:
 
 #Initialization of the class
 Imu_sensor = IMU_measures()
-
+Imu_sensor.initialization_IMU()
 
 
 def work_IMU():
@@ -269,10 +277,7 @@ def work_IMU():
 #
 #-----------------------------------------------------------------------------
 if __name__ == '__main__':
-    #try:
-        rospy.init_node('imu', anonymous=True)
-        rate = rospy.Rate(10)
-        work_IMU()
 
-    #except rospy.RosInterruptException:
-    #    pass
+    rospy.init_node('imu', anonymous=True)
+    rate = rospy.Rate(10)
+    work_IMU()

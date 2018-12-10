@@ -23,7 +23,7 @@ class image_converter:
     def save_image(self, photo):
 
         cv_image = self.bridge.imgmsg_to_cv2(photo)
-        print cv_image[:,639]
+        print cv_image[240,100:600]
         cv2.imshow("Image window", cv_image)
         cv2.waitKey(3)
 

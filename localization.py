@@ -219,7 +219,7 @@ class EKF_localization:
     def save_image(self, photo):
 
         self.predition_step()
-    
+
 
         self.frame = self.bridge.imgmsg_to_cv2(photo)
         self.line_z = self.take_frame_line()
@@ -391,16 +391,16 @@ class EKF_localization:
                             x_m = int(x_incr)
                             y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
 
-                        elif angle_incre > -np.pi-margin_angle and angle_incre < -np.pi/2 :
+                        elif angle_incre > -np.pi and angle_incre < -np.pi/2-margin_angle :
                             #third quadrant
                             x_incr = x_incr - increment
                             x_m = int(x_incr)
                             y_m = int(-np.tan(-np.pi-angle_incre)*(x_s - x_incr) + y_s)
 
-                        elif angle_incre > np.pi/2-margin_angle and angle_incre < np.pi/2+margin_angle:
+                        elif angle_incre >= np.pi/2-margin_angle and angle_incre <= np.pi/2+margin_angle:
                             y_m = int(y_m - 1)
 
-                        elif angle_incre > -np.pi/2-margin_angle and angle_incre < -np.pi/2+margin_angle:
+                        elif angle_incre >= -np.pi/2-margin_angle and angle_incre <= -np.pi/2+margin_angle:
                             y_m = int(y_m + 1)
 
                         count_pixels += 1
@@ -486,16 +486,16 @@ class EKF_localization:
                             x_m = int(x_incr)
                             y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
 
-                        elif angle_incre > -np.pi-margin_angle and angle_incre < -np.pi/2 :
+                        elif angle_incre > -np.pi and angle_incre < -np.pi/2-margin_angle :
                             #third quadrant
                             x_incr = x_incr - increment
                             x_m = int(x_incr)
                             y_m = int(-np.tan(-np.pi-angle_incre)*(x_s - x_incr) + y_s)
 
-                        elif angle_incre > np.pi/2-margin_angle and angle_incre < np.pi/2+margin_angle:
+                        elif angle_incre >= np.pi/2-margin_angle and angle_incre <= np.pi/2+margin_angle:
                             y_m = int(y_m - 1)
 
-                        elif angle_incre > -np.pi/2-margin_angle and angle_incre < -np.pi/2+margin_angle:
+                        elif angle_incre >= -np.pi/2-margin_angle and angle_incre <= -np.pi/2+margin_angle:
                             y_m = int(y_m + 1)
 
 
