@@ -521,14 +521,24 @@ class EKF_localization:
                         distance_max = count_pixels * resolution * increment
 
 
-                    p_radial = np.array([[x_s-x_m],[y_s-y_m]])
-                    dis_radial = LA.norm(p_radial)
-                    self.h[j] = resolution *dis_radial*np.cos(angle_incre-orient)
+                    if distance_max > 4900:
 
-                    points[0, j] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
-                    points[1, j] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
-                    points[2, j] = x_m
-                    points[3, j] = y_m
+                        self.h[i] = 0
+
+                        points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
+                        points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
+                        points[2, i] = points[0, i] + 0.0
+                        points[3, i] = points[1, i] + 0.0
+
+                    else:
+                        p_radial = np.array([[x_s-x_m],[y_s-y_m]])
+                        dis_radial = LA.norm(p_radial)
+                        self.h[i] = resolution *dis_radial*np.cos(angle_incre-orient)
+
+                        points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
+                        points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
+                        points[2, i] = x_m
+                        points[3, i] = y_m
 
                     angle_incre += incr_angle
 

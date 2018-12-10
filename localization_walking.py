@@ -48,9 +48,9 @@ from matplotlib.patches import Ellipse
 #
 #-----------------------------------------------------------------------------
 I = np.identity(6)
-cov_x = .1
-cov_y = 1
-cov_teta = .1
+cov_x = 3
+cov_y = 3
+cov_teta = 2
 matrix_R = np.array([[0,0,0,0,0,0],[0,cov_x,0,0,0,0],[0,0,0,0,0,0],[0,0,0,cov_y,0,0],[0,0,0,0,0,0],[0,0,0,0,0,cov_teta]])
 
 #Camera coordenate frames vectors
@@ -106,7 +106,7 @@ class EKF_localization:
         #covariance of instance t-1
         self.prev_cov = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
         #covariance of instance t
-        self.act_cov = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
+        self.act_cov = np.identity(6)
         #predicted covariance
         self.pred_cov = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
         #Jacobian matrix
