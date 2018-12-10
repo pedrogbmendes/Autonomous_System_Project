@@ -66,9 +66,9 @@ resolution = 50 #milimeters/pixel
 #INITIAL CONDITIONS
 x_init = 300
 vx_init = 0
-y_init = 90
+y_init = 50
 vy_init = 0
-orientation_init = 0
+orientation_init = np.pi/2
 ang_vel_init = 0
 
 #matching step
@@ -122,7 +122,7 @@ class EKF_localization:
         #map
         self.map = self.openImage()
         #matching threshold
-        self.gama = 10
+        self.gama = 100000000000
 
 
     def openImage(self):
@@ -136,7 +136,7 @@ class EKF_localization:
         BW_img_des = img_matrix == 205
         BW_img_des = BW_img_des * - 1
         #occupied positions of the map
-        BW_img_oc = img_matrix == 254
+        BW_img_oc = img_matrix == 0
         BW_img_oc = BW_img_oc* 1  #0 and 1 instead of False and True
 
         return BW_img_des+BW_img_oc
@@ -150,7 +150,7 @@ class EKF_localization:
         self.subsIMU = rospy.Subscriber('/imu/data',Imu,self.sub_pub_calRot)
         #and to to Subscribe camera data
         self.image_sub = rospy.Subscriber('/camera/depth/image_raw',Image,self.save_image)
-        rate = rospy.Rate(10)
+        rate = rospy.Rate(20)
 
         rospy.spin()
 
@@ -193,15 +193,15 @@ class EKF_localization:
 
         S = self.matrix_H.dot(self.pred_cov.dot(self.matrix_H.transpose()))+self.matrix_Q
         match = v_p.transpose().dot(LA.inv(S).dot(v_p))
-
+        print match
         return match
 
 
-    def update_step(self, points):
+    def update_step(self):
 
         #Kalman gain
 
-        k = (self.pred_cov.dot(self.matrix_H.transpose())).dot(LA.inv((self.matrix_H.dot(self.pred_cov)).dot(self.matrix_H.transpose()) + matrix_Q))
+        k = (self.pred_cov.dot(self.matrix_H.transpose())).dot(LA.inv((self.matrix_H.dot(self.pred_cov)).dot(self.matrix_H.transpose()) + self.matrix_Q))
 
         self.act_state = self.pred_state + k.dot(self.line_z - self.h)
         self.act_cov = (I - k.dot(self.matrix_H)).dot(self.pred_cov)
@@ -225,6 +225,7 @@ class EKF_localization:
         self.line_z = self.take_frame_line()
 
         points = self.observation_model(len(self.line_z) )
+
         if(no_update == 0):
             if(self.matching_step(points) <= self.gama):
 
@@ -234,17 +235,17 @@ class EKF_localization:
             #solve the kidnapping
             self.__init__()
 
+        #print self.act_state
+        print self.line_z
+        print self.h
         plt.ion()
         fig=plt.figure(1)
         pl.figure(1)
 
         ax = fig.add_subplot(111)
 
-        cmap = colors.ListedColormap(['grey','black', 'yellow'])
+        cmap = colors.ListedColormap(['grey', 'yellow', 'black'])
         ax.pcolor(self.map[::-1], cmap=cmap, edgecolors='k')
-
-
-
 
         x_plot = self.act_state[0]
         y_plot = 179 - self.act_state[2]
@@ -258,8 +259,11 @@ class EKF_localization:
 
     def take_frame_line(self):
         #select the line
-
-        line = self.frame[240,100:600] + 0.0
+        line = np.zeros((11,1));
+        aux = 50
+        for w in range(0,10):
+            line[w] = self.frame[240,aux] + 0.0
+            aux+= 54
 
         ori = 1
 
@@ -271,12 +275,18 @@ class EKF_localization:
         v_n[1] = self.rotation_matrix[1, 0]
         v_n[2] = 0
 
-        ori = ori * np.arccos(self.rotation_matrix[0, 0]/LA.norm(v_n))
+        ori = ori * np.arccos(self.rotation_matrix[0, 0]/LA.norm(v_n)) + 1.7
 
-        line_aux = np.append([line], [ori])
-        line_orient = np.reshape(line_aux, (len(line_aux), 1))
+        while ori <= -np.pi:
+            ori += 2*np.pi
+        while ori > np.pi:
+            ori -= 2*np.pi
 
-        return line_orient
+        line[len(line)-1] = ori
+        #line_aux = np.append([line], [ori])
+        #line_orient = np.reshape(line_aux, (len(line_aux), 1))
+        print line[len(line)-1]
+        return line
 
 
     def observation_model(self, size_vector):
@@ -288,6 +298,7 @@ class EKF_localization:
         length_map = self.map.shape[1]#no of columns
         width_map = self.map.shape[0]#no of rows
 
+
         self.h = np.zeros((size_vector, 1))#vector to return with the distances
         middle = int(np.floor((size_vector-1)/2))
         points = np.zeros((4,size_vector-1))
@@ -296,10 +307,6 @@ class EKF_localization:
         global no_update
 
         if self.pred_state[0] in range(0, length_map-1) and self.pred_state[2] in range(0, width_map-1):
-            #position outside the map
-            no_update += 1;
-
-        else:
 
             #all the angles are between -pi(exclusive) and pi(inclusive)
             #predicted orientation of the drone
@@ -319,15 +326,14 @@ class EKF_localization:
 
             #predicted position of the drone
             x_incr = self.pred_state[0] + 0.0
-            x_s = int(self.pred_state[0]) + 0.0
-            y_s = int(self.pred_state[2]) + 0.0
-            x_m = int(self.pred_state[0]) + 0.0
-            y_m = int(self.pred_state[2]) + 0.0
+            x_s = int(self.pred_state[0]) + 0
+            y_s = int(self.pred_state[2]) + 0
+            x_m = int(self.pred_state[0]) + 0
+            y_m = int(self.pred_state[2]) + 0
 
             if self.map[y_s, x_s] != 0:
                 #outside the free known space
                 no_update += 1;
-
             else:
 
                 no_update = 0;
@@ -407,14 +413,26 @@ class EKF_localization:
                         distance_max = count_pixels * resolution * increment
 
 
-                    p_radial = np.array([[x_s-x_m],[y_s-y_m]])
-                    dis_radial = LA.norm(p_radial)
-                    self.h[i] = resolution *dis_radial*np.cos(angle_incre-orient)
 
-                    points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
-                    points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
-                    points[2, i] = x_m
-                    points[3, i] = y_m
+                    if distance_max > 4900:
+
+                        self.h[i] = 0
+
+                        points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
+                        points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
+                        points[2, i] = points[0, i] + 0.0
+                        points[3, i] = points[1, i] + 0.0
+
+                    else:
+                        p_radial = np.array([[x_s-x_m],[y_s-y_m]])
+                        dis_radial = LA.norm(p_radial)
+                        self.h[i] = resolution *dis_radial*np.cos(angle_incre-orient)
+
+                        points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
+                        points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
+                        points[2, i] = x_m
+                        points[3, i] = y_m
+
 
                     angle_incre -= incr_angle
 
@@ -520,6 +538,11 @@ class EKF_localization:
                     y_m = y_s
                     x_incr = x_s
 
+        else:
+            #position outside the map
+            no_update += 1;
+
+
         #predited orientation
         self.h[size_vector-1] = self.pred_state[4] + 0.0
 
@@ -574,3 +597,4 @@ if __name__ == '__main__':
 
     #except rospy.RosInterruptException:
         #pass
+      #pass
