@@ -48,7 +48,7 @@ import matplotlib.pyplot as plt
 #
 #-----------------------------------------------------------------------------
 I = np.identity(6)
-cov_x = 1
+cov_x = .1
 cov_y = 1
 cov_teta = .1
 matrix_R = np.array([[0,0,0,0,0,0],[0,cov_x,0,0,0,0],[0,0,0,0,0,0],[0,0,0,cov_y,0,0],[0,0,0,0,0,0],[0,0,0,0,0,cov_teta]])
@@ -158,36 +158,14 @@ class EKF_localization:
 
             dm = self.calc_dist(11, xr, yr, orir)
 
-            print(self.act_state);
+            #print(self.act_state);
 
             ys = self.act_state[2] +0.0
             xs = self.act_state[0] +0.0
 
-            plt.ion()
-            fig=plt.figure(1)
-            pl.figure(1)
-            ax = fig.add_subplot(111)
-            line1, = ax.plot(xr-50, 50-yr, 'ro')
-
-            line1, = ax.plot(xs-50, 50-ys, 'go')
-
-            s = -2 * math.log(1 - 0.95)
-            w, v=LA.eig(self.pred_cov*s)
-
-            t = np.linspace(0, 2*math.pi, 100)
-            plt.plot( -50+xs+w[0]*np.cos(t) , 50-ys+w[2]*np.sin(t) )
-            plt.grid(color='lightgray',linestyle='--')
-
-            #pl.plot(xs,y)
-            plt.axis([-50, 50, -50, 50])
-            #line1.set_ydata(np.sin(0.5 * x + phase))
-            fig.canvas.draw()
-            #plt.axis([0, 5, 0, 5])
-            #a = anim.FuncAnimation(fig, update, frames=10, repeat=False)
-            #plt.show()
-            plt.gcf().clear()
-
             self.predition_step()
+
+            print self.pred_state
 
         # #node of drone to Subscribe IMU data
         # self.subsIMU = rospy.Subscriber('/imu/data_raw',Imu,self.sub_pub_calRot)
@@ -204,16 +182,86 @@ class EKF_localization:
                 if(self.matching_step(points).all() <= self.gama):
                     self.update_step()
 
-            if (xr < 60):
+            print(xr, yr, orir)
+            if (xr < 60 and yr < 60 and orir == 0):
                 xr += 1
-            elif (xr == 60 and orir > -np.pi/2):
-                orir = orir - np.array([[np.pi/10]])
+            elif (xr == 60 and orir > -np.pi/2 and yr < 60):
+                orir = orir - np.array([[np.pi/40]])
+            elif (orir == -np.pi/2 and yr < 60 and xr == 60):
+                yr += 1
+            elif (xr == 60 and orir < -np.pi and yr < 60):
+                orir = orir - np.array([[np.pi/40]])
+                if (orir == -np.pi):
+                    orir = np.array([[np.pi]])
+            elif (orir <= np.pi and yr == 60 and xr > 40):
+                xr -= 1
+                orir = orir - np.array([[np.pi/40]])
+            elif (orir >= np.pi/2 and yr > 40 and xr == 40):
+                yr -= 1
+                orir = orir - np.array([[np.pi/40]])
+            elif (xr == 40 and orir > 0 and yr == 40):
+                orir = orir - np.array([[np.pi/40]])
 
+
+            print orir
             time.sleep(.1)
 
             ct += 1
-            if (ct == 42):
-                print ct
+            
+                
+
+            plt.ion()
+            fig=plt.figure(1)
+            pl.figure(1)
+            ax = fig.add_subplot(111)
+            cov_plot = np.array([[self.act_cov[0, 0], self.act_cov[0, 2]], [self.act_cov[2, 0], self.act_cov[2, 2]]])
+
+
+            endymin = 50-ys +(10* math.sin(self.act_state[4]-0.5061))
+            endxmin = xs-50 +(10* math.cos(self.act_state[4]-0.5061))
+            endymax = 50-ys +(10* math.sin(self.act_state[4]+0.5061))
+            endxmax = xs-50 +(10* math.cos(self.act_state[4]+0.5061))
+
+            endyrmin = 50-yr +(10* math.sin(orir-0.5061))
+            endyrmax = 50-yr +(10* math.sin(orir+0.5061))
+            endxrmin = xr-50 +(10* math.cos(orir-0.5061))
+            endxrmax = xr-50 +(10* math.cos(orir+0.5061))
+
+
+            line1, = ax.plot(xr-50, 50-yr, 'ro')
+
+            line1, = ax.plot(xs-50, 50-ys, 'go')
+
+            s = -2 * math.log(1 - 0.95)
+            
+            w, v=LA.eig(cov_plot*s)
+            angle = np.arctan(v[0, 1]/v[0,0])
+            
+            # ells = Ellipse([xs-50, 50-ys], 2*np.sqrt(w[0]), 2*np.sqrt(w[1]), angle * 180 / np.pi)
+            # ax.add_artist(ells)
+
+            t = np.linspace(0, 2*math.pi, 1000)
+            plt.plot( -50+xs+((2*np.sqrt(w[0])))*np.cos(t) , 50-ys+((2*np.sqrt(w[1])))*np.sin(t) )
+            plt.grid(color='lightgray',linestyle='--')
+
+            #pl.plot(xs,y)
+            plt.axis([-50, 50, -50, 50])
+            #line1.set_ydata(np.sin(0.5 * x + phase))
+
+            ax.plot([xr-50, endxrmin], [50-yr, endyrmin], 'r')
+            ax.plot([xr-50, endxrmax], [50-yr, endyrmax], 'r')
+            ax.plot([xs-50, endxmin], [50-ys, endymin], 'g')
+            ax.plot([xs-50, endxmax], [50-ys, endymax], 'g')
+            ax.plot([-20, 20], [-20, -20], 'b')
+            ax.plot([-20, 20], [20, 20], 'b')
+            ax.plot([-20, -20], [-20, 20], 'b')
+            ax.plot([20, 20], [-20, 20], 'b')
+
+            fig.canvas.draw()
+            #plt.axis([0, 5, 0, 5])
+            #a = anim.FuncAnimation(fig, update, frames=10, repeat=False)
+            #plt.show()
+            plt.gcf().clear()    
 
 
 
@@ -238,9 +286,15 @@ class EKF_localization:
 
         if (self.pred_state[4] > np.pi):
             self.pred_state[4] = self.pred_state[4] - 2 * np.pi * int(self.pred_state[4]/(2*np.pi)+1)
-        elif (self.pred_state[4] <= -np.pi):
+        elif (self.pred_state[4] <= -np.pi+0.01):
+            print "aqui"
             self.pred_state[4] = 2 * np.pi * int(self.pred_state[4]/(2*np.pi)+1) - self.pred_state[4]
 
+        if (self.pred_state[1] < 0.01):
+            self.pred_state[1] = 0
+        if (self.pred_state[1] < 0.01):
+            self.pred_state[3] = 0
+        
 
 
         self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R +0.0
@@ -253,10 +307,11 @@ class EKF_localization:
 
         #time.sleep(1)
         self.jacobian(size_v, points[0,:], points[1,:], points[2,:], points[3,:])
-        self.matrix_Q = np.identity(size_v)
+        self.matrix_Q = np.identity(size_v)*0.1
 
         v_p = self.line_z - self.h +0.0
-        print(v_p)
+        #print(self.line_z)
+        #print(self.h)
 
         S = self.matrix_H.dot(self.pred_cov.dot(self.matrix_H.transpose()))+self.matrix_Q +0.0
         match = v_p.transpose().dot(LA.inv(S).dot(v_p))
@@ -666,16 +721,16 @@ class EKF_localization:
                     x_m = int(x_incr)
                     y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
 
-                elif angle_incre > -np.pi-margin_angle and angle_incre < -np.pi/2 :
+                elif angle_incre > -np.pi and angle_incre < -np.pi/2 -margin_angle:
                     #third quadrant
                     x_incr = x_incr - increment
                     x_m = int(x_incr)
                     y_m = int(-np.tan(-np.pi-angle_incre)*(x_s - x_incr) + y_s)
 
-                elif angle_incre > np.pi/2-margin_angle and angle_incre < np.pi/2+margin_angle:
+                elif angle_incre >= np.pi/2-margin_angle and angle_incre <= np.pi/2+margin_angle:
                     y_m = int(y_m - 1)
 
-                elif angle_incre > -np.pi/2-margin_angle and angle_incre < -np.pi/2+margin_angle:
+                elif angle_incre >= -np.pi/2-margin_angle and angle_incre <= -np.pi/2+margin_angle:
                     y_m = int(y_m + 1)
 
                 count_pixels += 1
@@ -756,16 +811,16 @@ class EKF_localization:
                     x_m = int(x_incr)
                     y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
 
-                elif angle_incre > -np.pi-margin_angle and angle_incre < -np.pi/2 :
+                elif angle_incre > -np.pi and angle_incre < -np.pi/2-margin_angle :
                     #third quadrant
                     x_incr = x_incr - increment
                     x_m = int(x_incr)
                     y_m = int(-np.tan(-np.pi-angle_incre)*(x_s - x_incr) + y_s)
 
-                elif angle_incre > np.pi/2-margin_angle and angle_incre < np.pi/2+margin_angle:
+                elif angle_incre >= np.pi/2-margin_angle and angle_incre < np.pi/2+margin_angle:
                     y_m = int(y_m - 1)
 
-                elif angle_incre > -np.pi/2-margin_angle and angle_incre < -np.pi/2+margin_angle:
+                elif angle_incre >= -np.pi/2-margin_angle and angle_incre < -np.pi/2+margin_angle:
                     y_m = int(y_m + 1)
 
 
