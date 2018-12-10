@@ -327,7 +327,7 @@ class EKF_localization:
 
         #time.sleep(1)
         self.jacobian(size_v, points[0,:], points[1,:], points[2,:], points[3,:])
-        self.matrix_Q = np.identity(size_v)*30
+        self.matrix_Q = np.identity(size_v)
 
         v_p = self.line_z - self.h +0.0
         #print(self.line_z)
