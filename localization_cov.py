@@ -63,9 +63,9 @@ v_z = np.array([0,0,1])
 resolution = 0.1 #meters/pixel
 
 #INITIAL CONDITIONS
-x_init = 40
+x_init = 60
 vx_init = 0
-y_init = 40
+y_init = 60
 vy_init = 0
 orientation_init = 0
 ang_vel_init = 0
@@ -154,17 +154,17 @@ class EKF_localization:
         orir = np.array([[0]])
         global ct
         ct = 0
+
         while(1):
 
-            
+
             dm = self.calc_dist(11, xr, yr, orir)
 
-            print(self.act_state);
+            #print(self.act_state);
 
             ys = self.act_state[2] +0.0
             xs = self.act_state[0] +0.0
 
-            
 
             self.predition_step()
 
@@ -179,10 +179,10 @@ class EKF_localization:
 
             points = self.observation_model(len(self.line_z))
 
-            if(no_update == 0): 
+            if(no_update == 0):
                 if(self.matching_step(points).all() <= self.gama):
                     self.update_step()
-            
+
             if (xr < 60):
                 xr += 1
             elif (xr == 60 and orir < np.pi/4):
@@ -213,20 +213,34 @@ class EKF_localization:
 
 
             line1, = ax.plot(xr-50, 50-yr, 'ro')
-
             line1, = ax.plot(xs-50, 50-ys, 'go')
 
-            s = -2 * math.log(1 - 0.95)
-            
-            w, v=LA.eig(cov_plot*s)
-            angle = np.arctan(v[0, 1]/v[0,0])
-            print(angle)
+            s=-2 * math.log(1 - 0.95)
 
-            # ells = Ellipse([xs-50, 50-ys], 2*np.sqrt(w[0]), 2*np.sqrt(w[1]), angle * 180 / np.pi)
-            # ax.add_artist(ells)
+            w, v = LA.eig(cov_plot*s)
+            order = w.argsort()[::-1]
 
-            t = np.linspace(0, 2*math.pi, 100)
-            plt.plot( -50+xs+((2*np.sqrt(w[0])))*np.cos(t) , 50-ys+((2*np.sqrt(w[1])))*np.sin(t) )
+            w_ = w[order]
+            v_ = v[:,order]
+
+            angle = np.degrees(np.arctan2(*v_[:,0][::-1]))
+            #angle = np.degrees(np.arctan2(v[1, 0], v[0,0]))
+            #print cov_plot
+
+            pos = [xs-50, 50-ys]
+
+            width =  2 * np.sqrt(w[0])
+            height = 2 * np.sqrt(w[1])
+            ells= Ellipse(xy=pos, width=width, height=height, angle=angle, color='black')
+            ells.set_facecolor('none')
+
+            #t = np.linspace(0, 2*math.pi, 100)
+            #ells = Ellipse([xs-50, 50-ys], 2*np.sqrt(w[0]), 2*np.sqrt(w[1]), angle * 180 / np.pi)
+            ax.add_artist(ells)
+
+
+
+            #plt.plot( -50+xs+((2*np.sqrt(w[0])))*np.cos(t) , 50-ys+((2*np.sqrt(w[1])))*np.sin(t))
             plt.grid(color='lightgray',linestyle='--')
 
             #pl.plot(xs,y)
@@ -246,8 +260,8 @@ class EKF_localization:
             #plt.axis([0, 5, 0, 5])
             #a = anim.FuncAnimation(fig, update, frames=10, repeat=False)
             #plt.show()
-            plt.gcf().clear()    
-            
+            plt.gcf().clear()
+
 
 
 
@@ -280,7 +294,7 @@ class EKF_localization:
         #     self.pred_state[3] = 0;
 
 
-        self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R +0.0
+        self.pred_cov = ((self.matrix_A.dot(self.act_cov)).dot(self.matrix_A.transpose())) + matrix_R
 
 
     def matching_step(self, points):
@@ -293,9 +307,8 @@ class EKF_localization:
         self.matrix_Q = np.identity(size_v)
 
         v_p = self.line_z - self.h +0.0
-        print(v_p)
 
-        S = self.matrix_H.dot(self.pred_cov.dot(self.matrix_H.transpose()))+self.matrix_Q +0.0
+        S = self.matrix_H.dot(self.pred_cov.dot(self.matrix_H.transpose()))+self.matrix_Q
         match = v_p.transpose().dot(LA.inv(S).dot(v_p))
 
 
@@ -308,9 +321,9 @@ class EKF_localization:
 
         k = (self.pred_cov.dot(self.matrix_H.transpose())).dot(LA.inv((self.matrix_H.dot(self.pred_cov)).dot(self.matrix_H.transpose()) + self.matrix_Q))
 
-        self.act_state = self.pred_state + k.dot(self.line_z - self.h) +0.0
-        self.act_cov = (I - k.dot(self.matrix_H)).dot(self.pred_cov) +0.0
-
+        self.act_state = self.pred_state + k.dot(self.line_z - self.h)
+        self.act_cov = (I - k.dot(self.matrix_H)).dot(self.pred_cov)
+        print self.act_cov
 
 
 
@@ -343,7 +356,6 @@ class EKF_localization:
 
         ori = ori * np.arccos(self.rotation_matrix[0, 0]/LA.norm(np.array([self.rotation_matrix[0, 0], self.rotation_matrix[1, 0], 0])))
 
-        #print(ori)
 
         line_orient = np.concatenate((a, ori))
         return line
@@ -402,7 +414,7 @@ class EKF_localization:
                 #prediction of position point by the camera
                 #Stops when find a obstacle or reachs the max range of camera (5 meters)
                 while map[y_m, x_m] == 0 and distance_max < 50 and x_m in range(0, length_map) and y_m in range(0, width_map):
-                    
+
                     while angle_incre <= -np.pi:
                         angle_incre += 2*np.pi
                     while angle_incre > np.pi:
@@ -465,8 +477,6 @@ class EKF_localization:
                         x_incr = x_incr - increment
                         x_m = int(x_incr)
                         y_m = int(-np.tan(-np.pi-angle_incre)*(x_s - x_incr) + y_s)
-                        if (y_m < -1000):
-                            print y_m
 
                     elif angle_incre > np.pi/2-margin_angle and angle_incre < np.pi/2+margin_angle:
                         y_m = int(y_m - 1)
@@ -596,7 +606,7 @@ class EKF_localization:
 
         #predited orientation
         self.h[size_vector-1] = self.pred_state[4] +0.0
-        
+
         return points
 
 
@@ -612,7 +622,7 @@ class EKF_localization:
         dist = np.zeros((size_vector-1, 1))#vector to return with the distances
         middle = int(np.floor((size_vector-1)/2))
 
-        
+
         #first 2 rows are the points in the photo plane (xs,ys)
         #thrid and fourth row are the points of the object (xf,yf)
 

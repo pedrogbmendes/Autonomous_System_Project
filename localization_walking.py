@@ -40,7 +40,7 @@ from matplotlib import colors
 import matplotlib.animation as anim
 import pylab as pl
 import matplotlib.pyplot as plt
-
+from matplotlib.patches import Ellipse
 
 #-----------------------------------------------------------------------------I
 #
@@ -207,8 +207,8 @@ class EKF_localization:
             time.sleep(.1)
 
             ct += 1
-            
-                
+
+
 
             plt.ion()
             fig=plt.figure(1)
@@ -233,15 +233,35 @@ class EKF_localization:
             line1, = ax.plot(xs-50, 50-ys, 'go')
 
             s = -2 * math.log(1 - 0.95)
-            
-            w, v=LA.eig(cov_plot*s)
-            angle = np.arctan(v[0, 1]/v[0,0])
-            
-            # ells = Ellipse([xs-50, 50-ys], 2*np.sqrt(w[0]), 2*np.sqrt(w[1]), angle * 180 / np.pi)
-            # ax.add_artist(ells)
 
-            t = np.linspace(0, 2*math.pi, 1000)
-            plt.plot( -50+xs+((2*np.sqrt(w[0])))*np.cos(t) , 50-ys+((2*np.sqrt(w[1])))*np.sin(t) )
+            w, v = LA.eig(cov_plot*s)
+            order = w.argsort()[::-1]
+
+            w_ = w[order]
+            v_ = v[:,order]
+
+            angle = np.degrees(np.arctan2(*v_[:,0][::-1]))
+            #angle = np.degrees(np.arctan2(v[1, 0], v[0,0]))
+            #print cov_plot
+
+            pos = [xs-50, 50-ys]
+
+            width =  2 * np.sqrt(w_[0])
+            height = 2 * np.sqrt(w_[1])
+            ells= Ellipse(xy=pos, width=width, height=height, angle=angle, color='black')
+            ells.set_facecolor('none')
+            ax.add_artist(ells)
+
+
+
+            # w, v=LA.eig(cov_plot*s)
+            # angle = np.arctan(v[0, 1]/v[0,0])
+            #
+            # # ells = Ellipse([xs-50, 50-ys], 2*np.sqrt(w[0]), 2*np.sqrt(w[1]), angle * 180 / np.pi)
+            # # ax.add_artist(ells)
+            #
+            # t = np.linspace(0, 2*math.pi, 1000)
+            # plt.plot( -50+xs+((2*np.sqrt(w[0])))*np.cos(t) , 50-ys+((2*np.sqrt(w[1])))*np.sin(t) )
             plt.grid(color='lightgray',linestyle='--')
 
             #pl.plot(xs,y)
@@ -261,7 +281,7 @@ class EKF_localization:
             #plt.axis([0, 5, 0, 5])
             #a = anim.FuncAnimation(fig, update, frames=10, repeat=False)
             #plt.show()
-            plt.gcf().clear()    
+            plt.gcf().clear()
 
 
 
@@ -294,7 +314,7 @@ class EKF_localization:
             self.pred_state[1] = 0
         if (self.pred_state[1] < 0.01):
             self.pred_state[3] = 0
-        
+
 
 
         self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R +0.0
@@ -307,7 +327,7 @@ class EKF_localization:
 
         #time.sleep(1)
         self.jacobian(size_v, points[0,:], points[1,:], points[2,:], points[3,:])
-        self.matrix_Q = np.identity(size_v)*0.1
+        self.matrix_Q = np.identity(size_v)*30
 
         v_p = self.line_z - self.h +0.0
         #print(self.line_z)
