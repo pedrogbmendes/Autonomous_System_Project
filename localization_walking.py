@@ -48,9 +48,9 @@ from matplotlib.patches import Ellipse
 #
 #-----------------------------------------------------------------------------
 I = np.identity(6)
-cov_x = 3
-cov_y = 3
-cov_teta = 2
+cov_x = 50
+cov_y = 50
+cov_teta = 50
 matrix_R = np.array([[0,0,0,0,0,0],[0,cov_x,0,0,0,0],[0,0,0,0,0,0],[0,0,0,cov_y,0,0],[0,0,0,0,0,0],[0,0,0,0,0,cov_teta]])
 
 #Camera coordenate frames vectors
@@ -106,7 +106,7 @@ class EKF_localization:
         #covariance of instance t-1
         self.prev_cov = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
         #covariance of instance t
-        self.act_cov = np.identity(6)
+        self.act_cov = np.identity(6)*10
         #predicted covariance
         self.pred_cov = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
         #Jacobian matrix
@@ -174,12 +174,12 @@ class EKF_localization:
         # rate = rospy.Rate(10)
 
         # rospy.spin()
-            self.line_z = np.concatenate((dm,orir))
+            self.line_z = dm
 
-            points = self.observation_model(len(self.line_z))
+            self.observation_model(len(self.line_z))
 
             if(no_update == 0):
-                if(self.matching_step(points).all() <= self.gama):
+                if(self.matching_step().all() <= self.gama):
                     self.update_step()
 
             print(xr, yr, orir)
@@ -211,7 +211,8 @@ class EKF_localization:
 
 
             plt.ion()
-            fig=plt.figure(1)
+            #fig=plt.figure(1)
+            fig=plt.figure(1,figsize=(80,60))
             pl.figure(1)
             ax = fig.add_subplot(111)
             cov_plot = np.array([[self.act_cov[0, 0], self.act_cov[0, 2]], [self.act_cov[2, 0], self.act_cov[2, 2]]])
@@ -320,13 +321,9 @@ class EKF_localization:
         self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R +0.0
 
 
-    def matching_step(self, points):
+    def matching_step(self):
 
         size_v = len(self.line_z)
-
-
-        #time.sleep(1)
-        self.jacobian(size_v, points[0,:], points[1,:], points[2,:], points[3,:])
         self.matrix_Q = np.identity(size_v)
 
         v_p = self.line_z - self.h +0.0
@@ -398,8 +395,10 @@ class EKF_localization:
         width_map = self.map.shape[0] #no of rows
 
         self.h = np.zeros((size_vector, 1))#vector to return with the distances
-        middle = int(np.floor((size_vector-1)/2))
-        points = np.zeros((4,size_vector-1))
+        middle = int(np.floor((size_vector)/2))
+        points = np.zeros((4,size_vector))
+        v_angles = np.zeros(size_vector)
+        v_dis = np.zeros(size_vector)
 
         orient = self.pred_state[4]+0.0
         if (map[int(self.pred_state[2]), int(self.pred_state[0])] != 0):
@@ -423,7 +422,7 @@ class EKF_localization:
             distance_max = count_pixels * resolution
 
             #field of view +- 29 degrees
-            incr_angle = (29.0*np.pi)/(180*((size_vector-1)/2))
+            incr_angle = (29.0*np.pi)/(180*((size_vector)/2))
             angle_incre = orient + 0.0
 
             #predicted position of the drone
@@ -435,7 +434,7 @@ class EKF_localization:
 
 
 
-            for i in range(middle, size_vector-1):
+            for i in range(middle, size_vector):
 
                 #prediction of position point by the camera
                 #Stops when find a obstacle or reachs the max range of camera (5 meters)
@@ -527,6 +526,9 @@ class EKF_localization:
                 points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
                 points[2, i] = x_m + 0
                 points[3, i] = y_m + 0
+
+                v_angles[i] = orient-angle_incre
+                v_dis[i] = dis_radial*resolution
 
                 angle_incre -= incr_angle
 
@@ -624,6 +626,9 @@ class EKF_localization:
                 points[2, j] = x_m +0
                 points[3, j] = y_m +0
 
+                v_angles[j] = angle_incre-orient
+                v_dis[j] = dis_radial*resolution
+
                 angle_incre += incr_angle
 
                 count_pixels = 1
@@ -632,10 +637,8 @@ class EKF_localization:
                 y_m = y_s +0
                 x_incr = x_s +0
 
-        #predited orientation
-        self.h[size_vector-1] = self.pred_state[4] +0.0
+        self.jacobian(size_vector, points[0,:], points[1,:],points[2,:], points[3,:],  v_dis, v_angles)
 
-        return points
 
 
     def calc_dist(self, size_vector, xr, yr, orient):
@@ -647,8 +650,8 @@ class EKF_localization:
         length_map = self.map.shape[1]#no of columns
         width_map = self.map.shape[0]#no of rows
 
-        dist = np.zeros((size_vector-1, 1))#vector to return with the distances
-        middle = int(np.floor((size_vector-1)/2))
+        dist = np.zeros((size_vector, 1))#vector to return with the distances
+        middle = int(np.floor((size_vector)/2))
 
 
         #first 2 rows are the points in the photo plane (xs,ys)
@@ -670,7 +673,7 @@ class EKF_localization:
         if(size_vector == 2):
             incr_angle = 0;
         else:
-            incr_angle = (29.0*np.pi)/(180*((size_vector-1)/2))
+            incr_angle = (29.0*np.pi)/(180*((size_vector)/2))
         angle_incre = orient + 0.0
 
         #predicted position of the drone
@@ -682,7 +685,7 @@ class EKF_localization:
 
 
 
-        for i in range(middle, size_vector-1):
+        for i in range(middle, size_vector):
 
             #prediction of position point by the camera
             #Stops when find a obstacle or reachs the max range of camera (5 meters)
@@ -863,28 +866,28 @@ class EKF_localization:
         return dist
 
 
-    def jacobian(self, size_vector, xs, ys, xp, yp):
+    def jacobian(self, size_vector, xs, ys,xp, yp,  v_d, ang):
         #determine the jacobian of h
         self.matrix_H = np.zeros((size_vector, 6))
 
-        for it in range(0, size_vector-1):
-            self.matrix_H[it,:] = self.partial_jacobian1(xs[it], ys[it], xp[it], yp[it])
-
-        self.matrix_H[size_vector-1, :] = self.partial_jacobian2()
+        for it in range(0, size_vector):
+            self.matrix_H[it,:] = self.partial_jacobian(xs[it], ys[it],xp[it], yp[it], v_d[it], ang[it])
 
 
-    def partial_jacobian1(self, xs1, ys1, xp1, yp1):
 
-        d_h = np.zeros(6)
-        d_h[0] = (xs1-xp1)/math.sqrt(np.power(xs1-xp1, 2)+np.power(ys1-yp1, 2))
-        d_h[2] = (ys1-yp1)/math.sqrt(np.power(xs1-xp1, 2)+np.power(ys1-yp1, 2))
-
-        return d_h
-
-    def partial_jacobian2(self):
+    def partial_jacobian(self, xs1, ys1,xp1, yp1, d, ang):
 
         d_h = np.zeros(6)
-        d_h[4] = 1
+        xr = self.pred_state[0] + 0
+        yr = self.pred_state[2] + 0
+
+        if xs1 == xp1 and ys1 == yp1:
+            d_h[0] = 0
+            d_h[2] = 0
+        else:
+            d_h[0] = (-(xs1-xr+d*np.cos(ang))) / math.sqrt(np.power(xs1-xr+d*np.cos(ang), 2) + np.power(ys1-yr+d*np.sin(ang), 2))
+            d_h[2] = (-(ys1-yr+d*np.sin(ang))) / math.sqrt(np.power(xs1-xr+d*np.cos(ang), 2) + np.power(ys1-yr+d*np.sin(ang), 2))
+            d_h[4] = ((xs1-xr+d*np.cos(ang))*(-d*np.sin(ang)) + (ys1-yr+d*np.sin(ang))*(d*np.cos(ang)) ) / math.sqrt(np.power(xs1-xr+d*np.cos(ang), 2) + np.power(ys1-yr+d*np.sin(ang), 2))
 
         return d_h
 

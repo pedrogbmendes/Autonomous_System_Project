@@ -43,7 +43,7 @@ from matplotlib import colors
 import matplotlib.animation as anim
 import pylab as pl
 import matplotlib.pyplot as plt
-
+from matplotlib.patches import Ellipse
 
 #-----------------------------------------------------------------------------I
 #
@@ -51,9 +51,9 @@ import matplotlib.pyplot as plt
 #
 #-----------------------------------------------------------------------------
 I = np.identity(6)
-cov_x = 10
-cov_y = 10
-cov_teta = .1
+cov_x =40
+cov_y = 40
+cov_teta = 30
 matrix_R = np.array([[0,0,0,0,0,0],[0,cov_x,0,0,0,0],[0,0,0,0,0,0],[0,0,0,cov_y,0,0],[0,0,0,0,0,0],[0,0,0,0,0,cov_teta]])
 
 #Camera coordenate frames vectors
@@ -62,14 +62,14 @@ v_y = np.array([0,1,0])
 v_z = np.array([0,0,1])
 
 #map info
-resolution = 0.05 #meters/pixel
+resolution = 0.1 #meters/pixel
 
 #INITIAL CONDITIONS
-x_init = 330
+x_init = 350
 vx_init = 0
-y_init = 30
+y_init = 70
 vy_init = 0
-orientation_init = 0
+orientation_init = -np.pi/2
 ang_vel_init = 0
 
 np.set_printoptions(threshold=4)
@@ -127,7 +127,7 @@ class EKF_localization:
         #map
         self.map = self.openImage()
 
-        self.gama = 100
+        self.gama = 50000
 
 
     def openImage(self):
@@ -151,16 +151,14 @@ class EKF_localization:
     def robot_localization(self):
 
         xr = 350
-        yr = 30
-        orir = np.array([[0]])
+        yr = 70
+        orir = np.array([[-np.pi/2]])
         global ct
         ct = 0
 
 
         while(1):
-
-
-            dm = self.calc_dist(11, xr, yr, orir)
+            dm = self.calc_dist(20, xr, yr, orir)
 
             #print(self.act_state);
 
@@ -178,65 +176,83 @@ class EKF_localization:
         # rate = rospy.Rate(10)
 
         # rospy.spin()
-            self.line_z = np.concatenate((dm,orir))
+            self.line_z = dm
 
-            points = self.observation_model(len(self.line_z))
-
+            self.observation_model(len(self.line_z))
+            global no_update
             if(no_update == 0):
-                if(self.matching_step(points) <= self.gama):
+                if(self.matching_step() <= self.gama):
 
                     self.update_step()
-            elif no_update == 10:
-                    #the robot is lost
-                    #solve the kidnapping
-                self.__init__()
 
-            print(xr, yr, orir)
-            if ( xr >200 and xr < 450 and yr == 30 and orir == 0):
-                xr += 10
-            elif (xr == 450 and yr == 30 and orir == 0):
-                orir = - np.array([[np.pi/2]])
+            elif no_update == 5:
+                #the robot is lost
+                #solve the kidnapping
+                #intialization
+                no_update = 0
 
-            elif (orir == -np.pi/2 and yr >= 30 and yr < 45 and xr == 450):
-                yr += 5
+                self.prev_time = self.act_time + 0.0
+                self.act_time +=1
+                self.delta_time = self.act_time - self.prev_time +0.0
 
-            elif (yr == 45 and xr == 450 and orir == -np.pi/2):
-                orir =  np.array([[np.pi]])
+                self.prev_state = np.array([[0],[0],[0],[0],[0],[0]])
+                ori_init = self.act_state[4]
+                self.act_state = np.array([[300],[vx_init],[50],[vy_init],[ori_init],[ang_vel_init]])
+                self.pred_state = np.array([[0],[0],[0],[0],[0],[0]])
 
-            elif (xr <= 550 and orir == np.pi and xr > 400 and yr == 45):
-                xr -= 10
+                self.prev_cov = np.identity(6)
+                self.act_cov = np.identity(6)*2
+                self.pred_cov = np.identity(6)
 
-            elif (orir == np.pi and xr == 400 and yr==45 ):
-                orir =  np.array([[-np.pi/2]])
-                yr += 10
+                ys = self.act_state[2] +0.0
+                xs = self.act_state[0] +0.0
+                self.predition_step()
 
-            elif ( xr == 400  and yr>=45 and yr < 80):
-                orir =  orir - np.array([[np.pi/30]])
-                yr += 10
+                self.line_z = np.concatenate((dm,orir))
+                points = self.observation_model(len(self.line_z))
+                if(self.matching_step() <= self.gama):
+                    self.update_step()
 
-            elif ( xr == 400  and yr == 80):
-                orir =  np.array([[np.pi]])
 
-            elif (orir == np.pi and xr <= 400 and yr==80 and xr>200):
-                xr -= 10
 
-            elif(orir == np.pi and xr == 200 and yr==80):
-                orir = np.array([[np.pi/2]])
+            #print(xr, yr, orir)
 
-            elif (orir == np.pi/2 and yr <= 80 and yr>30 and xr == 200):
-                yr -= 5
+            # if ( xr >=200 and xr < 400 and yr == 30 and orir == 0):
+            #     xr += 1
+            # elif (xr == 400 and yr == 30 and orir <= 0 and orir > -np.pi/2 ):
+            #     orir = orir - np.array([[np.pi/40]])
+            #
+            # elif (orir == -np.pi/2 and yr >= 30 and yr < 65 and xr == 400):
+            #     yr += 1
+            #
+            #
+            # elif ( xr == 400  and yr == 65 and orir <= -np.pi/2 and orir > -np.pi):
+            #     if ct == 10:
+            #         orir =  orir - np.array([[np.pi/40]])
+            #     else:
+            #         ct += 1
+            #
+            # elif (orir == np.pi and xr <= 400 and yr==65 and xr>200):
+            #     ct = 0
+            #     xr -= 1
+            #
+            # elif(orir <= np.pi and orir > np.pi/2 and xr == 200 and yr==65):
+            #     orir = orir - np.array([[np.pi/40]])
+            #
+            # elif (orir == np.pi/2 and yr <= 65 and yr>50 and xr == 200):
+            #     yr -= 1
+            #
+            # elif (orir <= np.pi/2  and orir >= 0 and yr==50 and xr == 200):
+            #     orir = orir - np.array([[np.pi/40]])
+            #
+            # elif ( xr >=200 and xr < 400 and yr == 50 and orir == 0):
+            #     xr += 1
 
-            elif (orir == np.pi/2  and yr==30 and xr == 200):
-                orir = np.array([[0]])
-                xr += 10
-
-            ct += 1
-            print self.line_z
-            print "-----------------------------"
             print self.h
+            print self.line_z
 
             plt.ion()
-            fig=plt.figure(1)
+            fig=plt.figure(1,figsize=(80,60))
             pl.figure(1)
             ax = fig.add_subplot(111)
             cmap = colors.ListedColormap(['grey', 'yellow', 'black'])
@@ -262,14 +278,29 @@ class EKF_localization:
 
             s = -2 * math.log(1 - 0.95)
 
-            w, v=LA.eig(cov_plot*s)
-            angle = np.arctan(v[0, 1]/v[0,0])
+            w, v = LA.eig(cov_plot*s)
+            order = w.argsort()[::-1]
+
+            w_ = w[order]
+            v_ = v[:,order]
+
+            angle = np.degrees(np.arctan2(*v_[:,0][::-1]))
+            #angle = np.degrees(np.arctan2(v[1, 0], v[0,0]))
+            #print cov_plot
+
+            pos = [xs, 179-ys]
+
+            width =  2 * np.sqrt(w_[0])
+            height = 2 * np.sqrt(w_[1])
+
+
+
 
             # ells = Ellipse([xs-50, 50-ys], 2*np.sqrt(w[0]), 2*np.sqrt(w[1]), angle * 180 / np.pi)
             # ax.add_artist(ells)
 
-            t = np.linspace(0, 2*math.pi, 1000)
-            plt.plot( xs+((2*np.sqrt(w[0])))*np.cos(t) , 179-ys+((2*np.sqrt(w[1])))*np.sin(t) )
+            #t = np.linspace(0, 2*math.pi, 1000)
+            #plt.plot( xs+((2*np.sqrt(w[0])))*np.cos(t) , 179-ys+((2*np.sqrt(w[1])))*np.sin(t) )
             #plt.grid(color='lightgray',linestyle='--')
 
 
@@ -277,6 +308,9 @@ class EKF_localization:
             ax.plot([xr, endxrmax], [179-yr, endyrmax], 'r')
             ax.plot([xs, endxmin], [179-ys, endymin], 'g')
             ax.plot([xs, endxmax], [179-ys, endymax], 'g')
+            ells= Ellipse(xy=pos, width=width*3, height=height*3, angle=angle, color='black')
+            ells.set_facecolor('none')
+            ax.add_artist(ells)
 
 
             fig.canvas.draw()
@@ -321,16 +355,16 @@ class EKF_localization:
         self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R +0.0
 
 
-    def matching_step(self, points):
+    def matching_step(self):
 
         size_v = len(self.line_z)
 
 
         #time.sleep(1)
-        self.jacobian(size_v, points[0,:], points[1,:], points[2,:], points[3,:])
         self.matrix_Q = np.identity(size_v)
 
         v_p = self.line_z - self.h +0.0
+
         #print(self.line_z)
         #print(self.h)
 
@@ -399,9 +433,10 @@ class EKF_localization:
         width_map = self.map.shape[0] #no of rows
 
         self.h = np.zeros((size_vector, 1))#vector to return with the distances
-        middle = int(np.floor((size_vector-1)/2))
-        points = np.zeros((4,size_vector-1))
-
+        middle = int(np.floor((size_vector)/2))
+        points = np.zeros((4,size_vector))
+        v_angles = np.zeros(size_vector)
+        v_dis = np.zeros(size_vector)
         #predicted position of the drone
         x_incr = self.pred_state[0] +0.0
         x_s = int(self.pred_state[0]) +0
@@ -421,7 +456,6 @@ class EKF_localization:
             else:
 
                 no_update = 0
-                print no_update
                 #first 2 rows are the points in the photo plane (xs,ys)
                 #thrid and fourth row are the points of the object (xf,yf)
 
@@ -438,13 +472,13 @@ class EKF_localization:
                 distance_max = count_pixels * resolution
 
                 #field of view +- 29 degrees
-                incr_angle = (29.0*np.pi)/(180*((size_vector-1)/2))
+                incr_angle = (29.0*np.pi)/(180*((size_vector)/2))
                 angle_incre = orient + 0.0
 
 
 
 
-                for i in range(middle, size_vector-1):
+                for i in range(middle, size_vector):
 
                     #prediction of position point by the camera
                     #Stops when find a obstacle or reachs the max range of camera (5 meters)
@@ -536,6 +570,9 @@ class EKF_localization:
                     points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
                     points[2, i] = x_m + 0
                     points[3, i] = y_m + 0
+
+                    v_angles[i] = orient-angle_incre
+                    v_dis[i] = dis_radial*resolution
 
                     angle_incre -= incr_angle
 
@@ -633,6 +670,9 @@ class EKF_localization:
                     points[2, j] = x_m +0
                     points[3, j] = y_m +0
 
+                    v_angles[j] = angle_incre-orient
+                    v_dis[j] = dis_radial*resolution
+
                     angle_incre += incr_angle
 
                     count_pixels = 1
@@ -645,10 +685,9 @@ class EKF_localization:
             no_update += 1;
 
 
-        #predited orientation
-        self.h[size_vector-1] = self.pred_state[4] +0.0
+        self.jacobian(size_vector, points[0,:], points[1,:],points[2,:], points[3,:],  v_dis, v_angles)
 
-        return points
+
 
     def calc_dist(self, size_vector, xr, yr, orient):
             #function that recieves the pose of the robot and locates the robot in
@@ -659,8 +698,8 @@ class EKF_localization:
         length_map = self.map.shape[1]#no of columns
         width_map = self.map.shape[0]#no of rows
 
-        dist = np.zeros((size_vector-1, 1))#vector to return with the distances
-        middle = int(np.floor((size_vector-1)/2))
+        dist = np.zeros((size_vector, 1))#vector to return with the distances
+        middle = int(np.floor((size_vector)/2))
 
 
         #first 2 rows are the points in the photo plane (xs,ys)
@@ -694,7 +733,7 @@ class EKF_localization:
 
 
 
-        for i in range(middle, size_vector-1):
+        for i in range(middle, size_vector):
 
             #prediction of position point by the camera
             #Stops when find a obstacle or reachs the max range of camera (5 meters)
@@ -875,36 +914,31 @@ class EKF_localization:
         return dist
 
 
-    def jacobian(self, size_vector, xs, ys, xp, yp):
+    def jacobian(self, size_vector, xs, ys,xp, yp,  v_d, ang):
         #determine the jacobian of h
         self.matrix_H = np.zeros((size_vector, 6))
-
-        for it in range(0, size_vector-1):
-            self.matrix_H[it,:] = self.partial_jacobian1(xs[it], ys[it], xp[it], yp[it])
-
-        self.matrix_H[size_vector-1, :] = self.partial_jacobian2()
+        print ang
+        for it in range(0, size_vector):
+            self.matrix_H[it,:] = self.partial_jacobian(xs[it], ys[it],xp[it], yp[it], v_d[it], ang[it])
 
 
-    def partial_jacobian1(self, xs1, ys1, xp1, yp1):
+
+
+    def partial_jacobian(self, xs1, ys1,xp1, yp1, d, ang):
 
         d_h = np.zeros(6)
+        xr = self.pred_state[0] + 0
+        yr = self.pred_state[2] + 0
+
         if xs1 == xp1 and ys1 == yp1:
             d_h[0] = 0
             d_h[2] = 0
         else:
-            d_h[0] = (xs1-xp1)/math.sqrt(np.power(xs1-xp1, 2)+np.power(ys1-yp1, 2))
-            d_h[2] = (ys1-yp1)/math.sqrt(np.power(xs1-xp1, 2)+np.power(ys1-yp1, 2))
+            d_h[0] = (-(xs1-xr-d*np.cos(ang))) / math.sqrt(np.power(xs1-xr-d*np.cos(ang), 2) + np.power(ys1-yr-d*np.sin(ang), 2))
+            d_h[2] = (-(ys1-yr-d*np.sin(ang))) / math.sqrt(np.power(xs1-xr-d*np.cos(ang), 2) + np.power(ys1-yr-d*np.sin(ang), 2))
+            d_h[4] = ((xs1-xr-d*np.cos(ang))*(d*np.sin(ang)) + (ys1-yr-d*np.sin(ang))*(-d*np.cos(ang)) ) / math.sqrt(np.power(xs1-xr-d*np.cos(ang), 2) + np.power(ys1-yr-d*np.sin(ang), 2))
 
         return d_h
-
-    def partial_jacobian2(self):
-
-        d_h = np.zeros(6)
-        d_h[4] = 1
-
-        return d_h
-
-
 
 #-----------------------------------------------------------------------------
 #
