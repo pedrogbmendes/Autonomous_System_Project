@@ -51,9 +51,15 @@ from matplotlib.patches import Ellipse
 #
 #-----------------------------------------------------------------------------
 I = np.identity(6)
+<<<<<<< HEAD
+cov_x = 200
+cov_y = 300
+cov_teta = 40
+=======
 cov_x =40
 cov_y = 40
 cov_teta = 30
+>>>>>>> 452855e2960270a4b388d0ea1c31342037456329
 matrix_R = np.array([[0,0,0,0,0,0],[0,cov_x,0,0,0,0],[0,0,0,0,0,0],[0,0,0,cov_y,0,0],[0,0,0,0,0,0],[0,0,0,0,0,cov_teta]])
 
 #Camera coordenate frames vectors
@@ -127,7 +133,11 @@ class EKF_localization:
         #map
         self.map = self.openImage()
 
+<<<<<<< HEAD
+        self.gama = 10000000
+=======
         self.gama = 50000
+>>>>>>> 452855e2960270a4b388d0ea1c31342037456329
 
 
     def openImage(self):
@@ -252,7 +262,12 @@ class EKF_localization:
             print self.line_z
 
             plt.ion()
+<<<<<<< HEAD
+            fig=plt.figure(1, figsize=(80, 60))
+            
+=======
             fig=plt.figure(1,figsize=(80,60))
+>>>>>>> 452855e2960270a4b388d0ea1c31342037456329
             pl.figure(1)
             ax = fig.add_subplot(111)
             cmap = colors.ListedColormap(['grey', 'yellow', 'black'])
@@ -361,7 +376,12 @@ class EKF_localization:
 
 
         #time.sleep(1)
+<<<<<<< HEAD
+        self.jacobian(size_v, points[0,:], points[1,:], points[2,:], points[3,:])
+        self.matrix_Q = np.identity(size_v)*5
+=======
         self.matrix_Q = np.identity(size_v)
+>>>>>>> 452855e2960270a4b388d0ea1c31342037456329
 
         v_p = self.line_z - self.h +0.0
 

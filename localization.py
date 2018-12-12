@@ -122,7 +122,7 @@ class EKF_localization:
         #map
         self.map = self.openImage()
         #matching threshold
-        self.gama = 100000000000
+        self.gama = 1000^2
 
 
     def openImage(self):
@@ -156,7 +156,6 @@ class EKF_localization:
 
 
 
-
     def predition_step(self):
 
         self.prev_time = self.act_time + 0.0
@@ -186,7 +185,6 @@ class EKF_localization:
 
         size_v = len(self.line_z)
 
-        self.jacobian(size_v, points[0,:], points[1,:], points[2,:], points[3,:])
         self.matrix_Q = np.identity(size_v)
 
         v_p = self.line_z - self.h
@@ -214,8 +212,6 @@ class EKF_localization:
         self.rotation_matrix = quaternions.quat2mat(quaternion)
 
 
-
-
     def save_image(self, photo):
 
         self.predition_step()
@@ -224,7 +220,7 @@ class EKF_localization:
         self.frame = self.bridge.imgmsg_to_cv2(photo)
         self.line_z = self.take_frame_line()
 
-        points = self.observation_model(len(self.line_z) )
+        self.observation_model(len(self.line_z) )
 
         if(no_update == 0):
             if(self.matching_step(points) <= self.gama):
@@ -256,36 +252,14 @@ class EKF_localization:
 
 
 
-
     def take_frame_line(self):
         #select the line
-        line = np.zeros((11,1));
+        line = np.zeros((50,1));
         aux = 50
-        for w in range(0,10):
+        for w in range(0,50):
             line[w] = self.frame[240,aux] + 0.0
-            aux+= 54
+            aux+= 10
 
-        ori = 1
-
-        if self.rotation_matrix[1, 0] != 0:
-            ori = (self.rotation_matrix[1, 0]/abs(self.rotation_matrix[1, 0]))
-
-        v_n = np.zeros((3,1))
-        v_n[0] = self.rotation_matrix[0, 0]
-        v_n[1] = self.rotation_matrix[1, 0]
-        v_n[2] = 0
-
-        ori = ori * np.arccos(self.rotation_matrix[0, 0]/LA.norm(v_n)) + 1.7
-
-        while ori <= -np.pi:
-            ori += 2*np.pi
-        while ori > np.pi:
-            ori -= 2*np.pi
-
-        line[len(line)-1] = ori
-        #line_aux = np.append([line], [ori])
-        #line_orient = np.reshape(line_aux, (len(line_aux), 1))
-        print line[len(line)-1]
         return line
 
 
@@ -300,8 +274,11 @@ class EKF_localization:
 
 
         self.h = np.zeros((size_vector, 1))#vector to return with the distances
-        middle = int(np.floor((size_vector-1)/2))
-        points = np.zeros((4,size_vector-1))
+        middle = int(np.floor((size_vector)/2))
+        points = np.zeros((4,size_vector))
+        v_angles = np.zeros(size_vector)
+        v_dis = np.zeros(size_vector)
+
         #first 2 rows are the points in the photo plane (xs,ys)
         #thrid and fourth row are the points of the object (xf,yf)
         global no_update
@@ -321,7 +298,7 @@ class EKF_localization:
             distance_max = count_pixels * resolution
 
             #fill of view +- 29 degrees
-            incr_angle = (29.0*np.pi)/(180*((size_vector-1)/2))
+            incr_angle = (29.0*np.pi)/(180*((size_vector)/2))
             angle_incre = orient + 0.0
 
             #predicted position of the drone
@@ -338,7 +315,7 @@ class EKF_localization:
 
                 no_update = 0;
 
-                for i in range(middle, size_vector-1):
+                for i in range(middle, size_vector):
 
                     #prediction of position point by the camera
                     #Stops when find a obstacle or reachs the max range of camera (5 meters)
@@ -413,26 +390,27 @@ class EKF_localization:
                         distance_max = count_pixels * resolution * increment
 
 
-
                     if distance_max > 4900:
 
                         self.h[i] = 0
 
-                        points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
-                        points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
+                        points[0, i] = dis_radial*np.cos(orient-angle_incre)*np.sin(orient-angle_incre) + x_s
+                        points[1, i] = dis_radial*np.power(np.sin(orient-angle_incre),2)+y_s
                         points[2, i] = points[0, i] + 0.0
                         points[3, i] = points[1, i] + 0.0
 
                     else:
                         p_radial = np.array([[x_s-x_m],[y_s-y_m]])
                         dis_radial = LA.norm(p_radial)
-                        self.h[i] = resolution *dis_radial*np.cos(angle_incre-orient)
+                        self.h[i] = resolution *dis_radial*np.cos(orient-angle_incre)
 
-                        points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
-                        points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
+                        points[0, i] = dis_radial*np.cos(orient-angle_incre)*np.sin(orient-angle_incre) + x_s
+                        points[1, i] = dis_radial*np.power(np.sin(orient-angle_incre),2)+y_s
                         points[2, i] = x_m
                         points[3, i] = y_m
 
+                    v_angles[i] = orient-angle_incre
+                    v_dis[i] = dis_radial*resolution
 
                     angle_incre -= incr_angle
 
@@ -522,23 +500,26 @@ class EKF_localization:
 
 
                     if distance_max > 4900:
+                        self.h[j] = 0
 
-                        self.h[i] = 0
-
-                        points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
-                        points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
-                        points[2, i] = points[0, i] + 0.0
-                        points[3, i] = points[1, i] + 0.0
+                        points[0, j] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
+                        points[1, j] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
+                        points[2, j] = points[0, j] + 0.0
+                        points[3, j] = points[1, j] + 0.0
 
                     else:
                         p_radial = np.array([[x_s-x_m],[y_s-y_m]])
                         dis_radial = LA.norm(p_radial)
-                        self.h[i] = resolution *dis_radial*np.cos(angle_incre-orient)
+                        self.h[j] = resolution *dis_radial*np.cos(angle_incre-orient)
 
-                        points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
-                        points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
-                        points[2, i] = x_m
-                        points[3, i] = y_m
+                        points[0, j] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
+                        points[1, j] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
+                        points[2, j] = x_m
+                        points[3, j] = y_m
+
+                    v_angles[j] = angle_incre-orient
+                    v_dis[j] = dis_radial*resolution
+
 
                     angle_incre += incr_angle
 
@@ -552,43 +533,35 @@ class EKF_localization:
             #position outside the map
             no_update += 1;
 
-
-        #predited orientation
-        self.h[size_vector-1] = self.pred_state[4] + 0.0
-
-        return points
+        self.jacobian(size_vector, points[0,:], points[1,:],points[2,:], points[3,:],  v_dis, v_angles)
 
 
-    def jacobian(self, size_vector, xs, ys, xp, yp):
+
+    def jacobian(self, size_vector, xs, ys,xp, yp,  v_d, ang):
         #determine the jacobian of h
         self.matrix_H = np.zeros((size_vector, 6))
 
-        for it in range(0, size_vector-1):
-            self.matrix_H[it,:] = self.partial_jacobian1(xs[it], ys[it], xp[it], yp[it])
-
-        self.matrix_H[size_vector-1, :] = self.partial_jacobian2()
+        for it in range(0, size_vector):
+            self.matrix_H[it,:] = self.partial_jacobian(xs[it], ys[it],xp[it], yp[it], v_d[it], ang[it])
 
 
-    def partial_jacobian1(self, xs1, ys1, xp1, yp1):
+
+    def partial_jacobian(self, xs1, ys1,xp1, yp1, d, ang):
 
         d_h = np.zeros(6)
+        xr = self.pred_state[0] + 0
+        yr = self.pred_state[2] + 0
 
         if xs1 == xp1 and ys1 == yp1:
             d_h[0] = 0
             d_h[2] = 0
         else:
-            d_h[0] = (xs1-xp1)/math.sqrt(np.power(xs1-xp1, 2)+np.power(ys1-yp1, 2))
-            d_h[2] = (ys1-yp1)/math.sqrt(np.power(xs1-xp1, 2)+np.power(ys1-yp1, 2))
+            d_h[0] = (-(xs1-xr+d*np.cos(ang))) / math.sqrt(np.power(xs1-xr+d*np.cos(ang), 2) + np.power(ys1-yr+d*np.sin(ang), 2))
+            d_h[2] = (-(ys1-yr+d*np.sin(ang))) / math.sqrt(np.power(xs1-xr+d*np.cos(ang), 2) + np.power(ys1-yr+d*np.sin(ang), 2))
+            d_h[4] = ((xs1-xr+d*np.cos(ang))*(-d*np.sin(ang)) + (ys1-yr+d*np.sin(ang))*(d*np.cos(ang)) ) / math.sqrt(np.power(xs1-xr+d*np.cos(ang), 2) + np.power(ys1-yr+d*np.sin(ang), 2))
 
         return d_h
 
-
-    def partial_jacobian2(self):
-
-        d_h = np.zeros(6)
-        d_h[4] = 1
-
-        return d_h
 
 
 
