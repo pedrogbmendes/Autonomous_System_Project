@@ -28,7 +28,7 @@
 
 import numpy as np
 from numpy import linalg as LA
-from transforms3d import quaternions
+#from transforms3d import quaternions
 import roslib
 import sys
 import rospy
@@ -51,9 +51,9 @@ import matplotlib.pyplot as plt
 #
 #-----------------------------------------------------------------------------
 I = np.identity(6)
-cov_x = 10
-cov_y = 10
-cov_teta = .1
+cov_x = 200
+cov_y = 300
+cov_teta = 40
 matrix_R = np.array([[0,0,0,0,0,0],[0,cov_x,0,0,0,0],[0,0,0,0,0,0],[0,0,0,cov_y,0,0],[0,0,0,0,0,0],[0,0,0,0,0,cov_teta]])
 
 #Camera coordenate frames vectors
@@ -62,10 +62,10 @@ v_y = np.array([0,1,0])
 v_z = np.array([0,0,1])
 
 #map info
-resolution = 0.05 #meters/pixel
+resolution = 0.1 #meters/pixel
 
 #INITIAL CONDITIONS
-x_init = 330
+x_init = 350
 vx_init = 0
 y_init = 30
 vy_init = 0
@@ -127,7 +127,7 @@ class EKF_localization:
         #map
         self.map = self.openImage()
 
-        self.gama = 100
+        self.gama = 10000000
 
 
     def openImage(self):
@@ -236,7 +236,8 @@ class EKF_localization:
             print self.h
 
             plt.ion()
-            fig=plt.figure(1)
+            fig=plt.figure(1, figsize=(80, 60))
+            
             pl.figure(1)
             ax = fig.add_subplot(111)
             cmap = colors.ListedColormap(['grey', 'yellow', 'black'])
@@ -328,7 +329,7 @@ class EKF_localization:
 
         #time.sleep(1)
         self.jacobian(size_v, points[0,:], points[1,:], points[2,:], points[3,:])
-        self.matrix_Q = np.identity(size_v)
+        self.matrix_Q = np.identity(size_v)*5
 
         v_p = self.line_z - self.h +0.0
         #print(self.line_z)
@@ -448,7 +449,7 @@ class EKF_localization:
 
                     #prediction of position point by the camera
                     #Stops when find a obstacle or reachs the max range of camera (5 meters)
-                    while map[y_m, x_m] == 0 and distance_max < 50 and x_m in range(0, length_map) and y_m in range(0, width_map):
+                    while map[y_m, x_m] == 0 and distance_max < 500 and x_m in range(0, length_map) and y_m in range(0, width_map):
 
                         while angle_incre <= -np.pi:
                             angle_incre += 2*np.pi
@@ -555,7 +556,7 @@ class EKF_localization:
 
 
                 for j in range (middle-1, -1, -1):
-                    while map[y_m, x_m] == 0 and distance_max < 50 and x_m in range(0, length_map) and y_m in range(0, width_map):
+                    while map[y_m, x_m] == 0 and distance_max < 500 and x_m in range(0, length_map) and y_m in range(0, width_map):
                         while angle_incre <= -np.pi:
                             angle_incre += 2*np.pi
                         while angle_incre > np.pi:
@@ -698,7 +699,7 @@ class EKF_localization:
 
             #prediction of position point by the camera
             #Stops when find a obstacle or reachs the max range of camera (5 meters)
-            while map[y_m, x_m] == 0 and distance_max < 50 and x_m in range(0, length_map) and y_m in range(0, width_map):
+            while map[y_m, x_m] == 0 and distance_max < 500 and x_m in range(0, length_map) and y_m in range(0, width_map):
                 while angle_incre <= -np.pi:
                     angle_incre += 2*np.pi
                 while angle_incre > np.pi:
@@ -791,7 +792,7 @@ class EKF_localization:
 
 
         for j in range (middle-1, -1, -1):
-            while map[y_m, x_m] == 0 and distance_max < 50 and x_m in range(0, length_map) and y_m in range(0, width_map):
+            while map[y_m, x_m] == 0 and distance_max < 500 and x_m in range(0, length_map) and y_m in range(0, width_map):
                 while angle_incre <= -np.pi:
                     angle_incre += 2*np.pi
                 while angle_incre > np.pi:
