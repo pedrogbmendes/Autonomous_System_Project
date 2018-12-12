@@ -67,7 +67,7 @@ resolution = 0.1 #meters/pixel
 #INITIAL CONDITIONS
 x_init = 350
 vx_init = 0
-y_init = 70
+y_init = 60
 vy_init = 0
 orientation_init = -np.pi/2
 ang_vel_init = 0
@@ -444,7 +444,7 @@ class EKF_localization:
         x_m = int(self.pred_state[0]) +0
         y_m = int(self.pred_state[2]) +0
 
-
+        ct = 0
 
         global no_update
 
@@ -474,7 +474,6 @@ class EKF_localization:
                 #field of view +- 29 degrees
                 incr_angle = (29.0*np.pi)/(180*((size_vector)/2))
                 angle_incre = orient + 0.0
-
 
 
 
@@ -546,8 +545,6 @@ class EKF_localization:
                             x_incr = x_incr - increment
                             x_m = int(x_incr)
                             y_m = int(-np.tan(-np.pi-angle_incre)*(x_s - x_incr) + y_s)
-                            if (y_m < -1000):
-                                print y_m
 
                         elif angle_incre >= np.pi/2-margin_angle and angle_incre <= np.pi/2+margin_angle:
                             y_m = int(y_m - 1)
@@ -559,22 +556,23 @@ class EKF_localization:
                         distance_max = count_pixels * resolution * increment
 
 
-
-
                     p_radial = np.array([[x_s-x_m],[y_s-y_m]])
                     dis_radial = LA.norm(p_radial)
 
-                    self.h[i] = resolution *dis_radial*np.cos(angle_incre-orient)
+                    self.h[i] = resolution *dis_radial*np.sin((np.pi/2)-(incr_angle*ct))
 
-                    points[0, i] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s
-                    points[1, i] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s
+                    cateto = dis_radial * np.cos((np.pi/2)-(incr_angle*ct))
+
+                    points[0, i] = x_s + cateto*np.cos(orient-(np.pi/2))
+                    points[1, i] = y_s + cateto*np.sin(orient-(np.pi/2))
                     points[2, i] = x_m + 0
                     points[3, i] = y_m + 0
 
-                    v_angles[i] = orient-angle_incre
+                    v_angles[i] = orient - incr_angle*ct
                     v_dis[i] = dis_radial*resolution
 
                     angle_incre -= incr_angle
+                    ct += 1
 
                     count_pixels = 1
                     distance_max = count_pixels * resolution
@@ -589,6 +587,7 @@ class EKF_localization:
                 x_m = x_s +0
                 y_m = y_s +0
                 x_incr = x_s +0
+                ct = 1
 
 
                 for j in range (middle-1, -1, -1):
@@ -663,23 +662,28 @@ class EKF_localization:
 
                     p_radial = np.array([[x_s-x_m],[y_s-y_m]])
                     dis_radial = LA.norm(p_radial)
-                    self.h[j] = resolution *dis_radial*np.cos(angle_incre-orient)
+                    self.h[j] = resolution *dis_radial*np.sin((np.pi/2)-(incr_angle*ct))
 
-                    points[0, j] = dis_radial*np.cos(angle_incre-orient)*np.sin(angle_incre-orient) + x_s +0.0
-                    points[1, j] = dis_radial*np.power(np.sin(angle_incre-orient),2)+y_s +0.0
+                    cateto = dis_radial * np.cos((np.pi/2)-(incr_angle*ct))
+
+                    points[0, j] = x_s + cateto*np.cos(orient+(np.pi/2))
+                    points[1, j] = y_s + cateto*np.sin(orient+(np.pi/2))
                     points[2, j] = x_m +0
                     points[3, j] = y_m +0
 
-                    v_angles[j] = angle_incre-orient
+                    v_angles[j] = orient + incr_angle*ct
                     v_dis[j] = dis_radial*resolution
 
                     angle_incre += incr_angle
+                    ct += 1
 
                     count_pixels = 1
                     distance_max = count_pixels * resolution
                     x_m = x_s +0
                     y_m = y_s +0
                     x_incr = x_s +0
+
+
         else:
             #position outside the map
             no_update += 1;
@@ -718,10 +722,7 @@ class EKF_localization:
         distance_max = count_pixels * resolution
 
         #field of view +- 29 degrees
-        if(size_vector == 2):
-            incr_angle = 0;
-        else:
-            incr_angle = (29.0*np.pi)/(180*((size_vector-1)/2))
+        incr_angle = (29.0*np.pi)/(180*((size_vector)/2))
         angle_incre = orient + 0.0
 
         #predicted position of the drone
@@ -731,7 +732,7 @@ class EKF_localization:
         x_m = xr
         y_m = yr
 
-
+        ct = 0
 
         for i in range(middle, size_vector):
 
@@ -807,11 +808,11 @@ class EKF_localization:
                 count_pixels += 1
                 distance_max = count_pixels * resolution * increment
 
-
             p_radial = np.array([[x_s-x_m],[y_s-y_m]])
             dis_radial = LA.norm(p_radial)
+            dist[i] = resolution *dis_radial*np.sin((np.pi/2)-(incr_angle*ct))
 
-            dist[i] = resolution *dis_radial*np.cos(angle_incre-orient)
+            ct += 1
             angle_incre -= incr_angle
 
             count_pixels = 1
@@ -827,7 +828,7 @@ class EKF_localization:
         x_m = x_s
         y_m = y_s
         x_incr = x_s
-
+        ct = 1
 
         for j in range (middle-1, -1, -1):
             while map[y_m, x_m] == 0 and distance_max < 50 and x_m in range(0, length_map) and y_m in range(0, width_map):
@@ -898,13 +899,12 @@ class EKF_localization:
                 count_pixels += 1
                 distance_max = count_pixels * resolution * increment
 
-
             p_radial = np.array([[x_s-x_m],[y_s-y_m]])
             dis_radial = LA.norm(p_radial)
-            dist[j] = resolution *dis_radial*np.cos(angle_incre-orient)
+            dist[j] = resolution *dis_radial*np.sin((np.pi/2)-(incr_angle*ct))
 
             angle_incre += incr_angle
-
+            ct += 1
             count_pixels = 1
             distance_max = count_pixels * resolution
             x_m = x_s
