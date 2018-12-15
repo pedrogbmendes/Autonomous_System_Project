@@ -435,6 +435,7 @@ class EKF_localization:
      #function that recieves the pose of the robot and locates the robot in
         #the map. Determines what the drone should see in the given position
         #and orientation
+        tinit = rospy.get_time()
         map = self.map
         #map's size
         length_map = self.map.shape[1]#no of columns
@@ -722,6 +723,8 @@ class EKF_localization:
 
         self.jacobian(size_vector, points[0,:], points[1,:],points[2,:], points[3,:],  v_dis, v_angles)
 
+        tfinal = rospy.get_time();
+        print tfinal-tinit;
 
 
     def calc_dist(self, size_vector, xr, yr, orient):
