@@ -51,9 +51,9 @@ from matplotlib.patches import Ellipse
 #
 #-----------------------------------------------------------------------------
 I = np.identity(6)
-cov_x =40
-cov_y = 40
-cov_teta = 30
+cov_x =1000
+cov_y = 1000
+cov_teta = 1500
 matrix_R = np.array([[0,0,0,0,0,0],[0,cov_x,0,0,0,0],[0,0,0,0,0,0],[0,0,0,cov_y,0,0],[0,0,0,0,0,0],[0,0,0,0,0,cov_teta]])
 
 #Camera coordenate frames vectors
@@ -62,7 +62,7 @@ v_y = np.array([0,1,0])
 v_z = np.array([0,0,1])
 
 #map info
-resolution = 0.1 #meters/pixel
+resolution = 50 #meters/pixel
 
 #INITIAL CONDITIONS
 x_init = 350
@@ -73,9 +73,6 @@ orientation_init = -np.pi/2
 ang_vel_init = 0
 
 np.set_printoptions(threshold=4)
-
-global ct
-ct = 0
 
 global c
 c = 0
@@ -109,7 +106,7 @@ class EKF_localization:
         #covariance of instance t-1
         self.prev_cov = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
         #covariance of instance t
-        self.act_cov = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
+        self.act_cov = np.identity(6)*1000
         #predicted covariance
         self.pred_cov = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
         #Jacobian matrix
@@ -127,7 +124,7 @@ class EKF_localization:
         #map
         self.map = self.openImage()
 
-        self.gama = 50000
+        self.gama = 100000000
 
 
     def openImage(self):
@@ -153,9 +150,6 @@ class EKF_localization:
         xr = 350
         yr = 70
         orir = np.array([[-np.pi/2]])
-        global ct
-        ct = 0
-
 
         while(1):
             dm = self.calc_dist(20, xr, yr, orir)
@@ -190,28 +184,28 @@ class EKF_localization:
                 #solve the kidnapping
                 #intialization
                 no_update = 0
-
-                self.prev_time = self.act_time + 0.0
-                self.act_time +=1
-                self.delta_time = self.act_time - self.prev_time +0.0
-
-                self.prev_state = np.array([[0],[0],[0],[0],[0],[0]])
-                ori_init = self.act_state[4]
-                self.act_state = np.array([[300],[vx_init],[50],[vy_init],[ori_init],[ang_vel_init]])
-                self.pred_state = np.array([[0],[0],[0],[0],[0],[0]])
-
-                self.prev_cov = np.identity(6)
-                self.act_cov = np.identity(6)*2
-                self.pred_cov = np.identity(6)
-
-                ys = self.act_state[2] +0.0
-                xs = self.act_state[0] +0.0
-                self.predition_step()
-
-                self.line_z = np.concatenate((dm,orir))
-                points = self.observation_model(len(self.line_z))
-                if(self.matching_step() <= self.gama):
-                    self.update_step()
+                #
+                # self.prev_time = self.act_time + 0.0
+                # self.act_time +=1
+                # self.delta_time = self.act_time - self.prev_time +0.0
+                #
+                # self.prev_state = np.array([[0],[0],[0],[0],[0],[0]])
+                # ori_init = self.act_state[4]
+                # self.act_state = np.array([[300],[vx_init],[50],[vy_init],[ori_init],[ang_vel_init]])
+                # self.pred_state = np.array([[0],[0],[0],[0],[0],[0]])
+                #
+                # self.prev_cov = np.identity(6)
+                # self.act_cov = np.identity(6)*2
+                # self.pred_cov = np.identity(6)
+                #
+                # ys = self.act_state[2] +0.0
+                # xs = self.act_state[0] +0.0
+                # self.predition_step()
+                #
+                # self.line_z = dm
+                # points = self.observation_model(len(self.line_z))
+                # if(self.matching_step() <= self.gama):
+                #     self.update_step()
 
 
 
@@ -308,7 +302,7 @@ class EKF_localization:
             ax.plot([xr, endxrmax], [179-yr, endyrmax], 'r')
             ax.plot([xs, endxmin], [179-ys, endymin], 'g')
             ax.plot([xs, endxmax], [179-ys, endymax], 'g')
-            ells= Ellipse(xy=pos, width=width*3, height=height*3, angle=angle, color='black')
+            ells= Ellipse(xy=pos, width=width, height=height, angle=angle, color='black')
             ells.set_facecolor('none')
             ax.add_artist(ells)
 
@@ -338,7 +332,7 @@ class EKF_localization:
         self.prev_state = self.act_state +0.0
         self.prev_cov = self.act_cov +0.0
 
-        self.pred_state = self.matrix_A.dot(self.prev_state) +0.0
+        self.pred_state = self.matrix_A.dot(self.act_state) +0.0
 
         while self.pred_state[4] <= -np.pi:
             self.pred_state[4] += 2*np.pi
@@ -352,16 +346,14 @@ class EKF_localization:
         #     self.pred_state[4] = 2 * np.pi * int(self.pred_state[4]/(2*np.pi)+1) - self.pred_state[4]
 
 
-        self.pred_cov = ((self.matrix_A.dot(self.prev_cov)).dot(self.matrix_A.transpose())) + matrix_R +0.0
+        self.pred_cov = ((self.matrix_A.dot(self.act_cov)).dot(self.matrix_A.transpose())) + matrix_R +0.0
 
 
     def matching_step(self):
 
         size_v = len(self.line_z)
-
-
         #time.sleep(1)
-        self.matrix_Q = np.identity(size_v)
+        self.matrix_Q = np.identity(size_v)*1000
 
         v_p = self.line_z - self.h +0.0
 
@@ -371,55 +363,71 @@ class EKF_localization:
         S = self.matrix_H.dot(self.pred_cov.dot(self.matrix_H.transpose()))+self.matrix_Q +0.0
         match = v_p.transpose().dot(LA.inv(S).dot(v_p))
 
-        print match
         return match
 
 
     def update_step(self):
-
         #Kalman gain
-
         k = (self.pred_cov.dot(self.matrix_H.transpose())).dot(LA.inv((self.matrix_H.dot(self.pred_cov)).dot(self.matrix_H.transpose()) + self.matrix_Q))
 
-        self.act_state = self.pred_state + k.dot(self.line_z - self.h) +0.0
+        state_correction = k.dot(self.line_z - self.h)
+        for m in range(0,4):
+            state_correction[m] = state_correction[m]/resolution
+
+        while state_correction[4] <= -np.pi:
+            state_correction[4]  += 2*np.pi
+        while state_correction[4]  > np.pi:
+            state_correction[4]  -= 2*np.pi
+
+
+        print "hhhhhdda"
+        print state_correction
+
+        self.act_state = self.pred_state + state_correction
+        while self.act_state[4] <= -np.pi:
+            self.act_state[4]  += 2*np.pi
+        while self.act_state[4]  > np.pi:
+            self.act_state[4]  -= 2*np.pi
+
+
         self.act_cov = (I - k.dot(self.matrix_H)).dot(self.pred_cov) +0.0
 
 
 
 
 
-    def sub_pub_calRot(self, data):
-        #subscribe the imu data (quaternions) and calculate the rotation matrix
-        self.rotation_matrix = quaternions.quat2mat(data)
-
-
-    def save_image(self, photo):
-        self.frame = photo
-        self.line_z = self.take_frame_line()
-
-        points = self.observation_model(len(self.line_z) )
-        if(self.matching_step(points) <= self.gama):
-            update_step()
-
-
-
-
-    def take_frame_line(self):
-        #select the line
-
-        line = self.frame[320,:]
-
-        ori = 1
-
-        if self.rotation_matrix[1, 0] != 0:
-            ori = (self.rotation_matrix[1, 0]/abs(self.rotation_matrix[1, 0]))
-
-        ori = ori * np.arccos(self.rotation_matrix[0, 0]/LA.norm(np.array([self.rotation_matrix[0, 0], self.rotation_matrix[1, 0], 0])))
-
-        #print(ori)
-
-        line_orient = np.concatenate((a, ori))
-        return line
+    # def sub_pub_calRot(self, data):
+    #     #subscribe the imu data (quaternions) and calculate the rotation matrix
+    #     self.rotation_matrix = quaternions.quat2mat(data)
+    #
+    #
+    # def save_image(self, photo):
+    #     self.frame = photo
+    #     self.line_z = self.take_frame_line()
+    #
+    #     points = self.observation_model(len(self.line_z) )
+    #     if(self.matching_step(points) <= self.gama):
+    #         update_step()
+    #
+    #
+    #
+    #
+    # def take_frame_line(self):
+    #     #select the line
+    #
+    #     line = self.frame[320,:]
+    #
+    #     ori = 1
+    #
+    #     if self.rotation_matrix[1, 0] != 0:
+    #         ori = (self.rotation_matrix[1, 0]/abs(self.rotation_matrix[1, 0]))
+    #
+    #     ori = ori * np.arccos(self.rotation_matrix[0, 0]/LA.norm(np.array([self.rotation_matrix[0, 0], self.rotation_matrix[1, 0], 0])))
+    #
+    #     #print(ori)
+    #
+    #     line_orient = np.concatenate((a, ori))
+    #     return line
 
 
 
@@ -475,13 +483,10 @@ class EKF_localization:
                 incr_angle = (29.0*np.pi)/(180*((size_vector)/2))
                 angle_incre = orient + 0.0
 
-
-
                 for i in range(middle, size_vector):
-
                     #prediction of position point by the camera
                     #Stops when find a obstacle or reachs the max range of camera (5 meters)
-                    while map[y_m, x_m] == 0 and distance_max < 500 and x_m in range(0, length_map) and y_m in range(0, width_map):
+                    while map[y_m, x_m] == 0 and distance_max < 5000 and x_m in range(0, length_map) and y_m in range(0, width_map):
 
                         while angle_incre <= -np.pi:
                             angle_incre += 2*np.pi
@@ -530,7 +535,7 @@ class EKF_localization:
                             #sencond quadrant
                             x_incr = x_incr - increment
                             x_m = int(x_incr)
-                            y_m = int(-np.tan(np.pi-angle_incre)*( x_s - x_incr ) + y_s)
+                            y_m = int(-np.tan(angle_incre)*( x_incr - x_s ) + y_s)
 
 
                         elif angle_incre > -np.pi/2+margin_angle  and angle_incre < 0:
@@ -544,7 +549,7 @@ class EKF_localization:
                             #third quadrant
                             x_incr = x_incr - increment
                             x_m = int(x_incr)
-                            y_m = int(-np.tan(-np.pi-angle_incre)*(x_s - x_incr) + y_s)
+                            y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
 
                         elif angle_incre >= np.pi/2-margin_angle and angle_incre <= np.pi/2+margin_angle:
                             y_m = int(y_m - 1)
@@ -557,19 +562,32 @@ class EKF_localization:
 
 
                     p_radial = np.array([[x_s-x_m],[y_s-y_m]])
-                    dis_radial = LA.norm(p_radial)
+                    dis_radial = LA.norm(p_radial)*resolution
 
-                    self.h[i] = resolution *dis_radial*np.sin((np.pi/2)-(incr_angle*ct))
+                    x_sreal = x_s * resolution
+                    y_sreal = y_s * resolution
 
-                    cateto = dis_radial * np.cos((np.pi/2)-(incr_angle*ct))
+                    x_mreal = x_m * resolution
+                    y_mreal = y_m * resolution
 
-                    points[0, i] = x_s + cateto*np.cos(orient-(np.pi/2))
-                    points[1, i] = y_s + cateto*np.sin(orient-(np.pi/2))
-                    points[2, i] = x_m + 0
-                    points[3, i] = y_m + 0
+                    phi = (np.pi/2)-(incr_angle*ct)
+
+                    cateto = dis_radial * np.cos(phi)
+
+                    x_i = x_sreal + cateto*np.cos(orient-(np.pi/2))
+                    y_i = y_sreal + cateto*np.sin(orient-(np.pi/2))
+
+
+                    points[0, i] = x_i
+                    points[1, i] = y_i
+                    points[2, i] = x_mreal
+                    points[3, i] = y_mreal
+
+                    h_vector = np.array([[x_i-x_sreal],[y_i-y_sreal]])
+                    self.h[i] = LA.norm(h_vector)
 
                     v_angles[i] = orient - incr_angle*ct
-                    v_dis[i] = dis_radial*resolution
+                    v_dis[i] = dis_radial
 
                     angle_incre -= incr_angle
                     ct += 1
@@ -591,7 +609,7 @@ class EKF_localization:
 
 
                 for j in range (middle-1, -1, -1):
-                    while map[y_m, x_m] == 0 and distance_max < 500 and x_m in range(0, length_map) and y_m in range(0, width_map):
+                    while map[y_m, x_m] == 0 and distance_max < 5000 and x_m in range(0, length_map) and y_m in range(0, width_map):
                         while angle_incre <= -np.pi:
                             angle_incre += 2*np.pi
                         while angle_incre > np.pi:
@@ -661,18 +679,31 @@ class EKF_localization:
 
 
                     p_radial = np.array([[x_s-x_m],[y_s-y_m]])
-                    dis_radial = LA.norm(p_radial)
-                    self.h[j] = resolution *dis_radial*np.sin((np.pi/2)-(incr_angle*ct))
+                    dis_radial = LA.norm(p_radial)*resolution
 
-                    cateto = dis_radial * np.cos((np.pi/2)-(incr_angle*ct))
+                    x_sreal = x_s * resolution
+                    y_sreal = y_s * resolution
 
-                    points[0, j] = x_s + cateto*np.cos(orient+(np.pi/2))
-                    points[1, j] = y_s + cateto*np.sin(orient+(np.pi/2))
-                    points[2, j] = x_m +0
-                    points[3, j] = y_m +0
+                    x_mreal = x_m * resolution
+                    y_mreal = y_m * resolution
+
+                    phi = (np.pi/2)-(incr_angle*ct)
+
+                    cateto = dis_radial * np.cos(phi)
+
+                    x_i = x_sreal + cateto*np.cos(orient+(np.pi/2))
+                    y_i = y_sreal + cateto*np.sin(orient+(np.pi/2))
+
+                    points[0, j] = x_i
+                    points[1, j] = y_i
+                    points[2, j] = x_mreal
+                    points[3, j] = y_mreal
+
+                    h_vector = np.array([[x_i-x_sreal],[y_i-y_sreal]])
+                    self.h[j] = LA.norm(h_vector)
 
                     v_angles[j] = orient + incr_angle*ct
-                    v_dis[j] = dis_radial*resolution
+                    v_dis[j] = dis_radial
 
                     angle_incre += incr_angle
                     ct += 1
@@ -738,7 +769,7 @@ class EKF_localization:
 
             #prediction of position point by the camera
             #Stops when find a obstacle or reachs the max range of camera (5 meters)
-            while map[y_m, x_m] == 0 and distance_max < 500 and x_m in range(0, length_map) and y_m in range(0, width_map):
+            while map[y_m, x_m] == 0 and distance_max < 5000 and x_m in range(0, length_map) and y_m in range(0, width_map):
                 while angle_incre <= -np.pi:
                     angle_incre += 2*np.pi
                 while angle_incre > np.pi:
@@ -779,25 +810,25 @@ class EKF_localization:
                     #first quadrant
                     x_incr = x_incr + increment
                     x_m = int(x_incr)
-                    y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
+                    y_m = int(-np.tan(angle_incre)*( x_incr - x_s ) + y_s)
 
                 elif angle_incre > np.pi/2+margin_angle  and angle_incre <= np.pi:
                     #sencond quadrant
                     x_incr = x_incr - increment
                     x_m = int(x_incr)
-                    y_m = int(-np.tan(np.pi-angle_incre)*( x_s - x_incr ) + y_s)
+                    y_m = int(-np.tan(angle_incre)*( x_incr - x_s ) + y_s)
 
                 elif angle_incre > -np.pi/2+margin_angle  and angle_incre < 0:
                     #fourth quadrant
                     x_incr = x_incr + increment
                     x_m = int(x_incr)
-                    y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
+                    y_m = int(-np.tan(angle_incre)*( x_incr - x_s ) + y_s)
 
                 elif angle_incre > -np.pi and angle_incre < -np.pi/2 -margin_angle:
                     #third quadrant
                     x_incr = x_incr - increment
                     x_m = int(x_incr)
-                    y_m = int(-np.tan(-np.pi-angle_incre)*(x_s - x_incr) + y_s)
+                    y_m = int(-np.tan(angle_incre)*( x_incr - x_s ) + y_s)
 
                 elif angle_incre >= np.pi/2-margin_angle and angle_incre <= np.pi/2+margin_angle:
                     y_m = int(y_m - 1)
@@ -809,8 +840,20 @@ class EKF_localization:
                 distance_max = count_pixels * resolution * increment
 
             p_radial = np.array([[x_s-x_m],[y_s-y_m]])
-            dis_radial = LA.norm(p_radial)
-            dist[i] = resolution *dis_radial*np.sin((np.pi/2)-(incr_angle*ct))
+            dis_radial = LA.norm(p_radial)*resolution
+
+            x_sreal = x_s * resolution
+            y_sreal = y_s * resolution
+
+
+            phi = (np.pi/2)-(incr_angle*ct)
+            cateto = dis_radial * np.cos(phi)
+
+            x_i = x_sreal + cateto*np.cos(orient-(np.pi/2))
+            y_i = y_sreal + cateto*np.sin(orient-(np.pi/2))
+
+            h_vector = np.array([[x_i-x_sreal],[y_i-y_sreal]])
+            dist[i] = LA.norm(h_vector)
 
             ct += 1
             angle_incre -= incr_angle
@@ -831,7 +874,7 @@ class EKF_localization:
         ct = 1
 
         for j in range (middle-1, -1, -1):
-            while map[y_m, x_m] == 0 and distance_max < 500 and x_m in range(0, length_map) and y_m in range(0, width_map):
+            while map[y_m, x_m] == 0 and distance_max < 5000 and x_m in range(0, length_map) and y_m in range(0, width_map):
                 while angle_incre <= -np.pi:
                     angle_incre += 2*np.pi
                 while angle_incre > np.pi:
@@ -869,25 +912,25 @@ class EKF_localization:
                     #first quadrant
                     x_incr = x_incr + increment
                     x_m = int(x_incr)
-                    y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
+                    y_m = int(-np.tan(angle_incre)*( x_incr - x_s ) + y_s)
 
                 elif angle_incre > np.pi/2+margin_angle  and angle_incre <= np.pi:
                     #sencond quadrant
                     x_incr = x_incr - increment
                     x_m = int(x_incr)
-                    y_m = int(-np.tan(np.pi-angle_incre)*( x_s - x_incr ) + y_s)
+                    y_m = int(-np.tan(angle_incre)*( x_incr - x_s ) + y_s)
 
                 elif angle_incre > -np.pi/2+margin_angle  and angle_incre < 0:
                     #fourth quadrant
                     x_incr = x_incr + increment
                     x_m = int(x_incr)
-                    y_m = int(-np.tan(angle_incre)*(x_incr - x_s) + y_s)
+                    y_m = int(-np.tan(angle_incre)*( x_incr - x_s ) + y_s)
 
                 elif angle_incre > -np.pi and angle_incre < -np.pi/2-margin_angle :
                     #third quadrant
                     x_incr = x_incr - increment
                     x_m = int(x_incr)
-                    y_m = int(-np.tan(-np.pi-angle_incre)*(x_s - x_incr) + y_s)
+                    y_m = int(-np.tan(angle_incre)*( x_incr - x_s ) + y_s)
 
                 elif angle_incre >= np.pi/2-margin_angle and angle_incre < np.pi/2+margin_angle:
                     y_m = int(y_m - 1)
@@ -900,8 +943,20 @@ class EKF_localization:
                 distance_max = count_pixels * resolution * increment
 
             p_radial = np.array([[x_s-x_m],[y_s-y_m]])
-            dis_radial = LA.norm(p_radial)
-            dist[j] = resolution *dis_radial*np.sin((np.pi/2)-(incr_angle*ct))
+            dis_radial = LA.norm(p_radial)*resolution
+
+            x_sreal = x_s * resolution
+            y_sreal = y_s * resolution
+
+            phi = (np.pi/2)-(incr_angle*ct)
+            cateto = dis_radial * np.cos(phi)
+
+            x_i = x_sreal + cateto*np.cos(orient-(np.pi/2))
+            y_i = y_sreal + cateto*np.sin(orient-(np.pi/2))
+
+            h_vector = np.array([[x_i-x_sreal],[y_i-y_sreal]])
+            dist[j] = LA.norm(h_vector)
+
 
             angle_incre += incr_angle
             ct += 1
@@ -917,7 +972,7 @@ class EKF_localization:
     def jacobian(self, size_vector, xs, ys,xp, yp,  v_d, ang):
         #determine the jacobian of h
         self.matrix_H = np.zeros((size_vector, 6))
-        print ang
+
         for it in range(0, size_vector):
             self.matrix_H[it,:] = self.partial_jacobian(xs[it], ys[it],xp[it], yp[it], v_d[it], ang[it])
 
@@ -927,16 +982,16 @@ class EKF_localization:
     def partial_jacobian(self, xs1, ys1,xp1, yp1, d, ang):
 
         d_h = np.zeros(6)
-        xr = self.pred_state[0] + 0
-        yr = self.pred_state[2] + 0
+        xr = self.pred_state[0]*resolution;
+        yr = self.pred_state[2]*resolution;
 
         if xs1 == xp1 and ys1 == yp1:
             d_h[0] = 0
             d_h[2] = 0
         else:
-            d_h[0] = (-(xs1-xr-d*np.cos(ang))) / math.sqrt(np.power(xs1-xr-d*np.cos(ang), 2) + np.power(ys1-yr-d*np.sin(ang), 2))
-            d_h[2] = (-(ys1-yr-d*np.sin(ang))) / math.sqrt(np.power(xs1-xr-d*np.cos(ang), 2) + np.power(ys1-yr-d*np.sin(ang), 2))
-            d_h[4] = ((xs1-xr-d*np.cos(ang))*(d*np.sin(ang)) + (ys1-yr-d*np.sin(ang))*(-d*np.cos(ang)) ) / math.sqrt(np.power(xs1-xr-d*np.cos(ang), 2) + np.power(ys1-yr-d*np.sin(ang), 2))
+            d_h[0] = (xr+d*np.cos(ang)-xs1) / math.sqrt(np.power(xr+d*np.cos(ang)-xs1, 2) + np.power(yr+d*np.sin(ang)-ys1, 2))
+            d_h[2] = (yr+d*np.sin(ang)-ys1) / math.sqrt(np.power(xr+d*np.cos(ang)-xs1, 2) + np.power(yr+d*np.sin(ang)-ys1, 2))
+            d_h[4] =(((xr+d*np.cos(ang)-xs1)*(-d*np.sin(ang)))+((yr+d*np.sin(ang)-ys1)*(d*np.cos(ang))))/math.sqrt(np.power(xr+d*np.cos(ang)-xs1,2)+np.power(yr+d*np.sin(ang)-ys1,2))
 
         return d_h
 
